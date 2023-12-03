@@ -24,7 +24,7 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
 
   // TODO: Call platform specific functions
   @override
-  Future<bool> mannualLogin(
+  Future<bool> manualLogin(
       String saleID,
       String poiID,
       String providerIdentification,
@@ -33,7 +33,7 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
       String certificationCode,
       bool useTestEnvironment) async {
     // TODO: implement login
-    final response = await methodChannel.invokeMethod('mannualLogin', {
+    final response = await methodChannel.invokeMethod('manualLogin', {
       "saleID": saleID,
       "poiID": poiID,
       "providerIdentification": providerIdentification,
@@ -46,7 +46,7 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
   }
 
   @override
-  Future<String> qrLogin(
+  Future<Map<dynamic, dynamic>> qrLogin(
       String saleID,
       String poiID,
       String providerIdentification,

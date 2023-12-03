@@ -96,7 +96,7 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _login() async {
     _fusionApiFlutterPlugin.init(saleID, poiID, kek);
-    var result = await _fusionApiFlutterPlugin.mannualLogin(
+    var result = await _fusionApiFlutterPlugin.manualLogin(
         saleID,
         poiID,
         providerIdentification,
@@ -120,7 +120,7 @@ class _MyAppState extends State<MyApp> {
         certificationCode,
         true);
     print(result);
-    poiID = result;
+    poiID = result["newPoiID"];
     print("+++++++++++++++++++++++++++++");
     print(qrSaleID);
     print(qrKek);

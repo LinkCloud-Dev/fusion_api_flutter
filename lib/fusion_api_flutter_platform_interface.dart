@@ -32,7 +32,7 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
     return _instance.init(saleID, poiID, kek);
   }
 
-  Future<bool> mannualLogin(
+  Future<bool> manualLogin(
       String saleID,
       String poiID,
       String providerIdentification,
@@ -40,7 +40,7 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
       String softwareVersion,
       String certificationCode,
       bool useTestEnvironment) {
-    return _instance.mannualLogin(
+    return _instance.manualLogin(
         saleID,
         poiID,
         providerIdentification,
@@ -50,7 +50,7 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
         useTestEnvironment);
   }
 
-  Future<String> qrLogin(
+  Future<Map<dynamic, dynamic>> qrLogin(
       String saleID,
       String poiID,
       String providerIdentification,

@@ -13,7 +13,11 @@ class FusionApiFlutter {
     return FusionApiFlutterPlatform.instance.init(saleID, poiID, kek);
   }
 
-  Future<String> qrLogin(
+  /// Returns a map with the new poiID and the login result
+  ///
+  /// Eg. {"newPoiID": "12345678", "loginResult": "Success"}
+  /// loginResult can be "Success", "Failure"
+  Future<Map<dynamic, dynamic>> qrLogin(
       String saleID,
       String poiID,
       String providerIdentification,
@@ -31,7 +35,8 @@ class FusionApiFlutter {
         useTestEnvironment);
   }
 
-  Future<bool> mannualLogin(
+  /// Returns manual login result
+  Future<bool> manualLogin(
       String saleID,
       String poiID,
       String providerIdentification,
@@ -39,7 +44,7 @@ class FusionApiFlutter {
       String softwareVersion,
       String certificationCode,
       bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance.mannualLogin(
+    return FusionApiFlutterPlatform.instance.manualLogin(
         saleID,
         poiID,
         providerIdentification,

@@ -79,16 +79,16 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
     return response;
   }
 
-  // TODO: Fix the hardcoded doPayment
   @override
-  Future<void> doPayment(String saleID, String poiID,
+  Future<Map<dynamic, dynamic>> doPayment(String saleID, String poiID,
       List<Map<String, dynamic>> items, bool useTestEnvironment) async {
-    methodChannel.invokeMethod('doPayment', {
+    final response = await methodChannel.invokeMethod('doPayment', {
       "saleID": saleID,
       "poiID": poiID,
       "items": items,
       "useTestEnvironment": useTestEnvironment,
     });
+    return response;
   }
 
   @override

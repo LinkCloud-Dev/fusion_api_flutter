@@ -188,7 +188,10 @@ class _MyAppState extends State<MyApp> {
         "productLabel": "Test Product2"
       }
     ];
-    _fusionApiFlutterPlugin.doPayment(qrSaleID, qrPoiID, items, true);
+    var result =
+        await _fusionApiFlutterPlugin.doPayment(qrSaleID, qrPoiID, items, true);
+    print("??????????????????");
+    print(result);
   }
 
   Future<void> _refund() async {

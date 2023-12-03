@@ -59,7 +59,7 @@ class FusionApiFlutter {
         .logout(saleID, poiID, useTestEnvironment);
   }
 
-  Future<void> doPayment(String saleID, String poiID,
+  Future<Map<dynamic, dynamic>> doPayment(String saleID, String poiID,
       List<Map<String, dynamic>> items, bool useTestEnvironment) {
     return FusionApiFlutterPlatform.instance
         .doPayment(saleID, poiID, items, useTestEnvironment);

@@ -115,7 +115,8 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         call.argument("saleID")!!,
                         call.argument("poiID")!!,
                         call.argument("items")!!,
-                        call.argument("useTestEnvironment")!!
+                        call.argument("useTestEnvironment")!!,
+                        result
                 )
             }
             "doRefund" -> {
@@ -569,14 +570,17 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             saleID: String,
             poiID: String,
             items: List<MutableMap<String, Any>>,
-            useTestEnvironment: Boolean
+            useTestEnvironment: Boolean,
+            result: Result
     ) {
         val serviceID = MessageHeaderUtil.generateServiceID(10)
         val executor = Executors.newSingleThreadExecutor()
         var abortReason = ""
+        var responseResult: Map<String, Boolean>? = null
         val payment =
-                executor.submit<Boolean> {
+                executor.submit<Map<String, Boolean>?> {
                     var paymentRequest: SaleToPOIRequest?
+                    var responseResults: Map<String, Boolean>? = null
                     var gotValidResponse = false
                     // Payment request
                     try {
@@ -600,13 +604,12 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                 continue
                             }
                             if (saleToPOI is SaleToPOIResponse) {
-                                val responseResult: Map<String, Boolean>? =
-                                        handlePaymentResponseMessage(saleToPOI)
+                                responseResults = handlePaymentResponseMessage(saleToPOI)
                                 waitingForResponse =
-                                        responseResult?.get("WaitingForAnotherResponse") ?: true
+                                        responseResults?.get("WaitingForAnotherResponse") ?: true
                                 if (!waitingForResponse) {
                                     gotValidResponse =
-                                            responseResult?.get("GotValidResponse") ?: false
+                                            responseResults?.get("GotValidResponse") ?: false
                                 }
                             }
                         }
@@ -615,11 +618,12 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                     } catch (e: FusionException) {
                         log(e)
                     }
-                    gotValidResponse
+                    responseResults
                 }
         var gotValidResponse = false
         try {
-            gotValidResponse = payment[60, TimeUnit.SECONDS] // set timeout
+            responseResult = payment[60, TimeUnit.SECONDS] // set timeout
+            gotValidResponse = responseResult?.get("GotValidResponse") ?: false
         } catch (e: TimeoutException) {
             System.err.println("Payment Request Timeout...")
             abortReason = "Timeout"
@@ -629,17 +633,22 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
         } catch (e: InterruptedException) {
             log(String.format("Exception: %s", e.toString()))
             abortReason = "Other Exception"
-        } finally {
-            executor.shutdownNow()
-            if (!gotValidResponse)
-                    checkTransactionStatus(
-                            saleID,
-                            poiID,
-                            serviceID,
-                            abortReason,
-                            useTestEnvironment
-                    )
         }
+
+        result.success(responseResult)
+
+        // TODO: Consider if handle the payment fail here
+        // } finally {
+        //     executor.shutdownNow()
+        //     if (!gotValidResponse)
+        //             checkTransactionStatus(
+        //                     saleID,
+        //                     poiID,
+        //                     serviceID,
+        //                     abortReason,
+        //                     useTestEnvironment
+        //             )
+        // }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -743,7 +752,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
     }
 
     private fun handlePaymentResponseMessage(msg: SaleToPOI): Map<String, Boolean>? {
-        val responseResult: MutableMap<String, Boolean> = HashMap()
+        var responseResult: MutableMap<String, Boolean> = HashMap()
         val messageCategory: MessageCategory
         if (msg is SaleToPOIResponse) {
             log(String.format("Response(JSON): %s", msg.toJson()))
@@ -768,11 +777,17 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                             responseBody.additionalResponse
                                     )
                             )
+                            responseResult["Result"] = false
+                        } else {
+                            responseResult["Result"] = true
                         }
                         responseResult["GotValidResponse"] = true
+                    } else {
+                        responseResult["GotValidResponse"] = false
                     }
                     responseResult["WaitingForAnotherResponse"] = false
                 }
+                // Add Refund response handling
                 else ->
                         log(
                                 "$messageCategory received during Payment response message " +

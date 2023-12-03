@@ -59,6 +59,9 @@ class FusionApiFlutter {
         .logout(saleID, poiID, useTestEnvironment);
   }
 
+  /// Returns a map with the payment result
+  ///
+  /// Eg. {GotValidResponse=true, WaitingForAnotherResponse=false, Result=false}
   Future<Map<dynamic, dynamic>> doPayment(String saleID, String poiID,
       List<Map<String, dynamic>> items, bool useTestEnvironment) {
     return FusionApiFlutterPlatform.instance

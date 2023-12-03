@@ -62,10 +62,14 @@ class FusionApiFlutter {
   /// Returns a map with the payment result
   ///
   /// Eg. {GotValidResponse=true, WaitingForAnotherResponse=false, Result=false}
-  Future<Map<dynamic, dynamic>> doPayment(String saleID, String poiID,
-      List<Map<String, dynamic>> items, bool useTestEnvironment) {
+  Future<Map<dynamic, dynamic>> doPayment(
+      String saleID,
+      String poiID,
+      String transactionID,
+      List<Map<String, dynamic>> items,
+      bool useTestEnvironment) {
     return FusionApiFlutterPlatform.instance
-        .doPayment(saleID, poiID, items, useTestEnvironment);
+        .doPayment(saleID, poiID, transactionID, items, useTestEnvironment);
   }
 
   Future<void> doRefund(

@@ -114,6 +114,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                 doPayment(
                         call.argument("saleID")!!,
                         call.argument("poiID")!!,
+                        call.argument("transactionID")!!,
                         call.argument("items")!!,
                         call.argument("useTestEnvironment")!!,
                         result
@@ -569,6 +570,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
     private fun doPayment(
             saleID: String,
             poiID: String,
+            transactionID: String,
             items: List<MutableMap<String, Any>>,
             useTestEnvironment: Boolean,
             result: Result
@@ -589,6 +591,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                         saleID,
                                         poiID,
                                         serviceID,
+                                        transactionID,
                                         items,
                                         useTestEnvironment
                                 )
@@ -657,16 +660,22 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             saleID: String,
             poiID: String,
             serviceID: String,
+            transactionID: String,
             items: List<MutableMap<String, Any>>,
             useTestEnvironment: Boolean
     ): SaleToPOIRequest? {
         // Payment Request
+        // val saleTransactionID =
+        //         SaleTransactionID.Builder() //
+        //                 .transactionID(
+        //                         "transactionID" +
+        //                                 SimpleDateFormat("HH:mm:ssXXX").format(Date()).toString()
+        //                 )
+        //                 .timestamp(Instant.now())
+        //                 .build()
         val saleTransactionID =
                 SaleTransactionID.Builder() //
-                        .transactionID(
-                                "transactionID" +
-                                        SimpleDateFormat("HH:mm:ssXXX").format(Date()).toString()
-                        )
+                        .transactionID(transactionID)
                         .timestamp(Instant.now())
                         .build()
         val saleData =

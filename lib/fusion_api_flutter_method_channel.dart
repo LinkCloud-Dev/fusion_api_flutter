@@ -70,7 +70,6 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
   @override
   Future<bool> logout(
       String saleID, String poiID, bool useTestEnvironment) async {
-    // TODO: implement login
     final response = await methodChannel.invokeMethod('logout', {
       "saleID": saleID,
       "poiID": poiID,
@@ -80,11 +79,16 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
   }
 
   @override
-  Future<Map<dynamic, dynamic>> doPayment(String saleID, String poiID,
-      List<Map<String, dynamic>> items, bool useTestEnvironment) async {
+  Future<Map<dynamic, dynamic>> doPayment(
+      String saleID,
+      String poiID,
+      String transactionID,
+      List<Map<String, dynamic>> items,
+      bool useTestEnvironment) async {
     final response = await methodChannel.invokeMethod('doPayment', {
       "saleID": saleID,
       "poiID": poiID,
+      "transactionID": transactionID,
       "items": items,
       "useTestEnvironment": useTestEnvironment,
     });

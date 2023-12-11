@@ -77,9 +77,10 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
       String poiID,
       String transactionID,
       List<Map<String, dynamic>> items,
+      double totalAmount,
       bool useTestEnvironment) {
     return _instance.doPayment(
-        saleID, poiID, transactionID, items, useTestEnvironment);
+        saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
   }
 
   Future<void> doRefund(

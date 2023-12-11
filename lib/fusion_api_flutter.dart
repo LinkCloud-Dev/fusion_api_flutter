@@ -67,9 +67,10 @@ class FusionApiFlutter {
       String poiID,
       String transactionID,
       List<Map<String, dynamic>> items,
+      double totalAmount,
       bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance
-        .doPayment(saleID, poiID, transactionID, items, useTestEnvironment);
+    return FusionApiFlutterPlatform.instance.doPayment(
+        saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
   }
 
   Future<void> doRefund(

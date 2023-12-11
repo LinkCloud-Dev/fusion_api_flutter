@@ -169,7 +169,7 @@ class _MyAppState extends State<MyApp> {
       }
     ];
     _fusionApiFlutterPlugin.doPayment(
-        saleID, poiID, "teststringID", items, true);
+        saleID, poiID, "teststringID", items, 4, true);
   }
 
   Future<void> _mockQrPay() async {
@@ -190,7 +190,7 @@ class _MyAppState extends State<MyApp> {
       }
     ];
     var result = await _fusionApiFlutterPlugin.doPayment(
-        qrSaleID, qrPoiID, "TesttingID", items, true);
+        qrSaleID, qrPoiID, "TesttingID", items, 4, true);
     print("??????????????????");
     print(result);
   }

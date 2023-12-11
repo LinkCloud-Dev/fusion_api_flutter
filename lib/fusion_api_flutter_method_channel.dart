@@ -84,12 +84,14 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
       String poiID,
       String transactionID,
       List<Map<String, dynamic>> items,
+      double totalAmount,
       bool useTestEnvironment) async {
     final response = await methodChannel.invokeMethod('doPayment', {
       "saleID": saleID,
       "poiID": poiID,
       "transactionID": transactionID,
       "items": items,
+      "totalAmount": totalAmount,
       "useTestEnvironment": useTestEnvironment,
     });
     return response;

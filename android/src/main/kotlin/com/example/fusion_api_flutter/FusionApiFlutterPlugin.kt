@@ -116,6 +116,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         call.argument("poiID")!!,
                         call.argument("transactionID")!!,
                         call.argument("items")!!,
+                        call.argument("totalAmount")!!,
                         call.argument("useTestEnvironment")!!,
                         result
                 )
@@ -572,6 +573,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             poiID: String,
             transactionID: String,
             items: List<MutableMap<String, Any>>,
+            totalAmount: Double,
             useTestEnvironment: Boolean,
             result: Result
     ) {
@@ -593,6 +595,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                         serviceID,
                                         transactionID,
                                         items,
+                                        totalAmount,
                                         useTestEnvironment
                                 )
                         log("Sending message to websocket server: \n$paymentRequest")
@@ -662,6 +665,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             serviceID: String,
             transactionID: String,
             items: List<MutableMap<String, Any>>,
+            totalAmount: Double,
             useTestEnvironment: Boolean
     ): SaleToPOIRequest? {
         // Payment Request
@@ -685,7 +689,6 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         .saleTransactionID(saleTransactionID) //
                         .build()
         // TODO: Test the saleItems
-        var totalAmount = 0.0
         val saleItems = mutableListOf<SaleItem>()
         items.forEachIndexed() { index, item ->
             val saleItem =
@@ -699,7 +702,6 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                             .productLabel(item["productLabel"].toString()) //
                             .build()
             saleItems.add(saleItem)
-            totalAmount += item["itemAmount"].toString().toDouble()
         }
         val amountsReq =
                 AmountsReq.Builder() //

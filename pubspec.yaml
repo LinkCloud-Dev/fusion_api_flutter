@@ -1,6 +1,6 @@
 name: fusion_api_flutter
 description: A flutter wrapper of the Fusion Cloud API.
-version: 0.0.4
+version: 0.0.5
 homepage:
 
 environment:

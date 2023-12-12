@@ -98,13 +98,15 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
   }
 
   @override
-  Future<void> doRefund(String saleID, String poiID, double amount,
-      bool useTestEnvironment) async {
-    methodChannel.invokeMethod('doRefund', {
+  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
+      double amount, String? transactionID, bool useTestEnvironment) async {
+    final response = await methodChannel.invokeMethod('doRefund', {
       "saleID": saleID,
       "poiID": poiID,
       "amount": amount,
+      "transactionID": transactionID,
       "useTestEnvironment": useTestEnvironment,
     });
+    return response;
   }
 }

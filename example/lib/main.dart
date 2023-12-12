@@ -197,7 +197,7 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _refund() async {
     double amount = 0.0;
-    _fusionApiFlutterPlugin.doRefund(qrSaleID, qrPoiID, amount, true);
+    _fusionApiFlutterPlugin.doRefund(qrSaleID, qrPoiID, amount, null, true);
   }
 
   @override

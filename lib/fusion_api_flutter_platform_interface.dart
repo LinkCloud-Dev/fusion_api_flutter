@@ -83,8 +83,9 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
         saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
   }
 
-  Future<void> doRefund(
-      String saleID, String poiID, double amount, bool useTestEnvironment) {
-    return _instance.doRefund(saleID, poiID, amount, useTestEnvironment);
+  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
+      double amount, String? transactionID, bool useTestEnvironment) {
+    return _instance.doRefund(
+        saleID, poiID, amount, transactionID, useTestEnvironment);
   }
 }

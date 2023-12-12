@@ -73,9 +73,13 @@ class FusionApiFlutter {
         saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
   }
 
-  Future<void> doRefund(
-      String saleID, String poiID, double amount, bool useTestEnvironment) {
+  /// Returns a map with the refund result
+  ///
+  /// [transactionID] is optional. (Support both matched and unmatched refund)
+  /// Return value Eg. {GotValidResponse=true, WaitingForAnotherResponse=false, Result=false}
+  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
+      double amount, String? transactionID, bool useTestEnvironment) {
     return FusionApiFlutterPlatform.instance
-        .doRefund(saleID, poiID, amount, useTestEnvironment);
+        .doRefund(saleID, poiID, amount, transactionID, useTestEnvironment);
   }
 }

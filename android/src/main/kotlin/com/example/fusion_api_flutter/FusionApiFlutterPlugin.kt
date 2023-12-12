@@ -126,7 +126,9 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         call.argument("saleID")!!,
                         call.argument("poiID")!!,
                         call.argument("amount")!!,
-                        call.argument("useTestEnvironment")!!
+                        call.argument("transactionID"),
+                        call.argument("useTestEnvironment")!!,
+                        result
                 )
             }
             "initiateTransaction" -> {
@@ -762,7 +764,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
         } else log("Unexpected request message received.")
     }
 
-    private fun handlePaymentResponseMessage(msg: SaleToPOI): Map<String, Boolean>? {
+    private fun handlePaymentResponseMessage(msg: SaleToPOI): Map<String, Boolean> {
         var responseResult: MutableMap<String, Boolean> = HashMap()
         val messageCategory: MessageCategory
         if (msg is SaleToPOIResponse) {
@@ -1063,14 +1065,18 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             saleID: String,
             poiID: String,
             amount: Double,
-            useTestEnvironment: Boolean
+            transactionID: String?,
+            useTestEnvironment: Boolean,
+            result: Result
     ) {
         val serviceID = MessageHeaderUtil.generateServiceID(10)
         val executor = Executors.newSingleThreadExecutor()
         var abortReason = ""
+        var responseResult: Map<String, Boolean>? = null
         val refund =
-                executor.submit<Boolean> {
+                executor.submit<Map<String, Boolean>?> {
                     var refundRequest: SaleToPOIRequest?
+                    var responseResults: Map<String, Boolean>? = null
                     var gotValidResponse = false
                     // Payment request
                     try {
@@ -1080,6 +1086,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                         poiID,
                                         serviceID,
                                         amount,
+                                        transactionID,
                                         useTestEnvironment
                                 )
                         log("Sending message to websocket server: \n$refundRequest")
@@ -1094,13 +1101,13 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                                 continue
                             }
                             if (saleToPOI is SaleToPOIResponse) {
-                                val responseResult: Map<String, Boolean>? =
+                                responseResults =
                                         handlePaymentResponseMessage(saleToPOI)
                                 waitingForResponse =
-                                        responseResult?.get("WaitingForAnotherResponse") ?: true
+                                        responseResults["WaitingForAnotherResponse"] ?: true
                                 if (!waitingForResponse) {
                                     gotValidResponse =
-                                            responseResult?.get("GotValidResponse") ?: false
+                                            responseResults["GotValidResponse"] ?: false
                                 }
                             }
                         }
@@ -1109,11 +1116,12 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                     } catch (e: FusionException) {
                         log(e)
                     }
-                    gotValidResponse
+                    responseResults
                 }
         var gotValidResponse = false
         try {
-            gotValidResponse = refund[60, TimeUnit.SECONDS] // set timeout
+            responseResult = refund[60, TimeUnit.SECONDS] // set timeout
+            gotValidResponse = responseResult?.get("GotValidResponse") ?: false // set timeout
         } catch (e: TimeoutException) {
             System.err.println("Payment Request Timeout...")
             abortReason = "Timeout"
@@ -1134,6 +1142,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                             useTestEnvironment
                     )
         }
+        result.success(responseResult)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -1142,18 +1151,30 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
             poiID: String,
             serviceID: String,
             amount: Double,
+            transactionID: String?,
             useTestEnvironment: Boolean
     ): SaleToPOIRequest? {
         // Refund Request
         // TODO: Change to use the original transactionID
-        val saleTransactionID =
-                SaleTransactionID.Builder() //
-                        .transactionID(
-                                "transactionID" +
-                                        SimpleDateFormat("HH:mm:ssXXX").format(Date()).toString()
-                        )
-                        .timestamp(Instant.now())
-                        .build()
+        val saleTransactionID: SaleTransactionID
+        if (transactionID == null) {
+            saleTransactionID =
+                    SaleTransactionID.Builder() //
+                            .transactionID(
+                                    "transactionID" +
+                                            SimpleDateFormat("HH:mm:ssXXX")
+                                                    .format(Date())
+                                                    .toString()
+                            )
+                            .timestamp(Instant.now())
+                            .build()
+        } else {
+            saleTransactionID =
+                    SaleTransactionID.Builder() //
+                            .transactionID(transactionID)
+                            .timestamp(Instant.now())
+                            .build()
+        }
         val saleData =
                 SaleData.Builder() //
                         // .operatorID("")//

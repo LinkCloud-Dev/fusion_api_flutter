@@ -277,8 +277,10 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
         var loginResult = ""
         val executor = Executors.newSingleThreadExecutor()
         val login =
-                executor.submit<Map<String, String>> {
+                executor.submit<Map<String, String?>> {
                     var loginRequest: SaleToPOIRequest?
+                    var _newPoiID: String? = null
+                    var _loginResult: String? = null
                     // Payment request
                     try {
                         loginRequest =
@@ -303,12 +305,12 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
 
                             if (saleToPOI is SaleToPOIResponse) {
                                 waitingForResponse = handleLoginResponseMessage(saleToPOI)
-                                if (getLoginResult(saleToPOI) == ResponseResult.Success) {
-                                    loginResult = "Success"
+                                _loginResult = if (getLoginResult(saleToPOI) == ResponseResult.Success) {
+                                    "Success"
                                 } else {
-                                    loginResult = "Failure"
+                                    "Failure"
                                 }
-                                newPoiID = getPOIID(saleToPOI)
+                                _newPoiID = getPOIID(saleToPOI)
                             }
                         }
                     } catch (e: FusionException) {
@@ -317,12 +319,12 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         log(e)
                     }
 
-                    var results = mapOf("newPoiID" to newPoiID, "loginResult" to loginResult)
+                    val results = mapOf("newPoiID" to _newPoiID, "loginResult" to _loginResult)
                     results
                 }
 
         try {
-            var returnValues = login.get(60, TimeUnit.SECONDS) // set timeout
+            val returnValues = login.get(60, TimeUnit.SECONDS) // set timeout
             newPoiID = returnValues["newPoiID"].toString()
             loginResult = returnValues["loginResult"].toString()
         } catch (e: TimeoutException) {
@@ -332,7 +334,7 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
         } catch (e: InterruptedException) {
             log("Exception: $e")
         }
-        var values = mapOf("newPoiID" to newPoiID, "loginResult" to loginResult)
+        val values = mapOf("newPoiID" to newPoiID, "loginResult" to loginResult)
         result.success(values)
     }
 

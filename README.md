@@ -8,17 +8,20 @@ The usage is simple:
 
 1. Pairing POI with POS
   a. QR Pairing: Use `qrLogin()`
-  b. Manually: Use `login()`
+  b. Manually: Use `manualLogin()`
 2. Payment
   Use `doPayment()`
 3. Refund
   Use `doRefund()`
 
+## TODO
+- [] Receipt printing
+
 ## Support
 
-[x] Android support
-[ ] iOS support
-[ ] Windows support
+- [x] Android support
+- [ ] iOS support
+- [ ] Windows support
 
 ## Getting Started
 

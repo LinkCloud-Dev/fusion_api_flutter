@@ -15,7 +15,7 @@ The usage is simple:
   Use `doRefund()`
 
 ## TODO
-- [] Receipt printing
+- [ ] Receipt printing
 
 ## Support
 

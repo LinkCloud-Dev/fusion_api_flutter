@@ -15,6 +15,7 @@ The usage is simple:
   Use `doRefund()`
 
 ## TODO
+- [ ] ServiceID check as required by the certificate
 - [ ] Receipt printing
 
 ## Support

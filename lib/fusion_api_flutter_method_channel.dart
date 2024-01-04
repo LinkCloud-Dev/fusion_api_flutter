@@ -22,7 +22,6 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
         .invokeMethod('init', {"saleID": saleID, "poiID": poiID, "kek": kek});
   }
 
-  // TODO: Call platform specific functions
   @override
   Future<bool> manualLogin(
       String saleID,
@@ -32,7 +31,6 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
       String softwareVersion,
       String certificationCode,
       bool useTestEnvironment) async {
-    // TODO: implement login
     final response = await methodChannel.invokeMethod('manualLogin', {
       "saleID": saleID,
       "poiID": poiID,
@@ -54,7 +52,6 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
       String softwareVersion,
       String certificationCode,
       bool useTestEnvironment) async {
-    // TODO: implement login
     final response = await methodChannel.invokeMethod('qrLogin', {
       "saleID": saleID,
       "poiID": poiID,

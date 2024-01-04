@@ -110,7 +110,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _qrLogin() async {
-    _fusionApiFlutterPlugin.init(qrSaleID, qrPoiID, kek);
+    await _fusionApiFlutterPlugin.init(qrSaleID, qrPoiID, kek);
     var result = await _fusionApiFlutterPlugin.qrLogin(
         qrSaleID,
         qrPoiID,
@@ -120,16 +120,23 @@ class _MyAppState extends State<MyApp> {
         certificationCode,
         true);
     print(result);
-    poiID = result["newPoiID"];
-    print("+++++++++++++++++++++++++++++");
-    print(qrSaleID);
-    print(qrKek);
-    print(kek);
-    print("+++++++++++++++++++++++++++++");
+    qrPoiID = result["newPoiID"];
+    var secondResult = await _fusionApiFlutterPlugin.manualLogin(
+        qrSaleID,
+        qrPoiID,
+        providerIdentification,
+        applicationName,
+        softwareVersion,
+        certificationCode,
+        true);
+    print("_____________");
+    print("Following real login request");
+    print(secondResult);
   }
 
   Future<void> _qrLogout() async {
     _fusionApiFlutterPlugin.logout(qrSaleID, qrPoiID, true);
+    setState(() {});
   }
 
   Future<void> _logout() async {

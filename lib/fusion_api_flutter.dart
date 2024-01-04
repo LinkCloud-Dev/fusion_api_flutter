@@ -1,10 +1,6 @@
-import 'package:flutter/services.dart';
-
 import 'fusion_api_flutter_platform_interface.dart';
 
 class FusionApiFlutter {
-  static const MethodChannel _channel = MethodChannel("fusion_api_flutter");
-
   Future<String?> getPlatformVersion() {
     return FusionApiFlutterPlatform.instance.getPlatformVersion();
   }

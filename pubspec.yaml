@@ -1,7 +1,7 @@
 name: fusion_api_flutter
 description: A flutter wrapper of the Fusion Cloud API.
 version: 0.0.5
-homepage:
+#homepage:
 
 environment:
   sdk: ">=3.0.7 <4.0.0"
@@ -13,6 +13,7 @@ dependencies:
   plugin_platform_interface: ^2.0.2
   qr_flutter: ^4.1.0
   uuid: ^3.0.6
+  meta:
 
 dev_dependencies:
   flutter_test:

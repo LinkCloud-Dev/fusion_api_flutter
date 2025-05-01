@@ -5,77 +5,70 @@ class FusionApiFlutter {
     return FusionApiFlutterPlatform.instance.getPlatformVersion();
   }
 
-  Future<void> init(String saleID, String poiID, String kek) async {
-    return FusionApiFlutterPlatform.instance.init(saleID, poiID, kek);
+  Future<String> init({
+    required String saleID,
+    required String poiID,
+    required String kek,
+    required bool useTestEnvironment,
+  }) async {
+    return FusionApiFlutterPlatform.instance.init(
+      saleID: saleID,
+      poiID: poiID,
+      kek: kek,
+      useTestEnvironment: useTestEnvironment,
+    );
   }
 
-  /// Returns a map with the new poiID and the login result
-  ///
-  /// Eg. {"newPoiID": "12345678", "loginResult": "Success"}
-  /// loginResult can be "Success", "Failure"
-  Future<Map<dynamic, dynamic>> qrLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance.qrLogin(
-        saleID,
-        poiID,
-        providerIdentification,
-        applicationName,
-        softwareVersion,
-        certificationCode,
-        useTestEnvironment);
+  // Future<bool> initFromCache() {
+  //   return FusionApiFlutterPlatform.instance.initFromCache();
+  // }
+
+  Future<String> login({bool qrPairing = false}) {
+    return FusionApiFlutterPlatform.instance.login(qrPairing: qrPairing);
   }
 
-  /// Returns manual login result
-  Future<bool> manualLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance.manualLogin(
-        saleID,
-        poiID,
-        providerIdentification,
-        applicationName,
-        softwareVersion,
-        certificationCode,
-        useTestEnvironment);
+  // Future<bool> logout(String saleID, String poiID, bool useTestEnvironment) {
+  //   return FusionApiFlutterPlatform.instance
+  //       .logout(saleID, poiID, useTestEnvironment);
+  // }
+  Future<String> logout() {
+    return FusionApiFlutterPlatform.instance.logout();
   }
 
-  Future<bool> logout(String saleID, String poiID, bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance
-        .logout(saleID, poiID, useTestEnvironment);
-  }
 
-  /// Returns a map with the payment result
-  ///
-  /// Eg. {GotValidResponse=true, WaitingForAnotherResponse=false, Result=false}
-  Future<Map<dynamic, dynamic>> doPayment(
-      String saleID,
-      String poiID,
+  Future<void> doPayment(
       String transactionID,
       List<Map<String, dynamic>> items,
       double totalAmount,
-      bool useTestEnvironment) {
+      ) {
     return FusionApiFlutterPlatform.instance.doPayment(
-        saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
+      transactionID,
+      items,
+      totalAmount,
+    );
   }
 
-  /// Returns a map with the refund result
-  ///
-  /// [transactionID] is optional. (Support both matched and unmatched refund)
-  /// Return value Eg. {GotValidResponse=true, WaitingForAnotherResponse=false, Result=false}
-  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
-      double amount, String? transactionID, bool useTestEnvironment) {
-    return FusionApiFlutterPlatform.instance
-        .doRefund(saleID, poiID, amount, transactionID, useTestEnvironment);
+  Future<void> doRefund({
+    required String transactionID,
+    required List<Map<String, dynamic>> items,
+    required double refundAmount,
+    required String originalSaleID,
+    required String originalPOIID,
+    required String originalPOITransactionID,
+    required String originalPOITransactionTime,
+  }) {
+    return FusionApiFlutterPlatform.instance.doRefund(
+      transactionID: transactionID,
+      items: items,
+      refundAmount: refundAmount,
+      originalSaleID: originalSaleID,
+      originalPOIID: originalPOIID,
+      originalPOITransactionID: originalPOITransactionID,
+      originalPOITransactionTime: originalPOITransactionTime,
+    );
+  }
+
+  Future<String> doAbort() {
+    return FusionApiFlutterPlatform.instance.doAbort();
   }
 }

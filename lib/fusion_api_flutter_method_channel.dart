@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:meta/meta.dart';
 
 import 'fusion_api_flutter_platform_interface.dart';
 
@@ -11,99 +12,98 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
 
   @override
   Future<String?> getPlatformVersion() async {
-    final version =
-        await methodChannel.invokeMethod<String>('getPlatformVersion');
+    final version = await methodChannel.invokeMethod<String>(
+      'getPlatformVersion',
+    );
     return version;
   }
 
   @override
-  Future<void> init(String saleID, String poiID, String kek) async {
-    methodChannel
-        .invokeMethod('init', {"saleID": saleID, "poiID": poiID, "kek": kek});
-  }
-
-  @override
-  Future<bool> manualLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) async {
-    final response = await methodChannel.invokeMethod('manualLogin', {
+  Future<String> init({
+    required String saleID,
+    required String poiID,
+    required String kek,
+    required bool useTestEnvironment,
+  }) async {
+    final result = await methodChannel.invokeMethod('init', {
       "saleID": saleID,
       "poiID": poiID,
-      "providerIdentification": providerIdentification,
-      "applicationName": applicationName,
-      "softwareVersion": softwareVersion,
-      "certificationCode": certificationCode,
+      "kek": kek,
       "useTestEnvironment": useTestEnvironment,
     });
-    return response;
+
+    return result;
+  }
+
+  // @override
+  // Future<bool> initFromCache() async {
+  //   final result = await methodChannel.invokeMethod('initFromCache');
+  //   return result;
+  // }
+
+  @override
+  Future<String> login({bool qrPairing = false}) async {
+    final result = await methodChannel.invokeMethod<String>('login', {
+      "qrPairing": qrPairing,
+    });
+
+    return result?? "started";
+  }
+
+  // @override
+  // Future<bool> logout(
+  //     String saleID, String poiID, bool useTestEnvironment) async {
+  //   final response = await methodChannel.invokeMethod('logout', {
+  //     "saleID": saleID,
+  //     "poiID": poiID,
+  //     "useTestEnvironment": useTestEnvironment,
+  //   });
+  //   return response;
+  // }
+
+  @override
+  Future<String> logout() async {
+    final result = await methodChannel.invokeMethod<String>('logout');
+    return result!;
   }
 
   @override
-  Future<Map<dynamic, dynamic>> qrLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) async {
-    final response = await methodChannel.invokeMethod('qrLogin', {
-      "saleID": saleID,
-      "poiID": poiID,
-      "providerIdentification": providerIdentification,
-      "applicationName": applicationName,
-      "softwareVersion": softwareVersion,
-      "certificationCode": certificationCode,
-      "useTestEnvironment": useTestEnvironment,
-    });
-    return response;
-  }
-
-  @override
-  Future<bool> logout(
-      String saleID, String poiID, bool useTestEnvironment) async {
-    final response = await methodChannel.invokeMethod('logout', {
-      "saleID": saleID,
-      "poiID": poiID,
-      "useTestEnvironment": useTestEnvironment,
-    });
-    return response;
-  }
-
-  @override
-  Future<Map<dynamic, dynamic>> doPayment(
-      String saleID,
-      String poiID,
+  Future<void> doPayment(
       String transactionID,
       List<Map<String, dynamic>> items,
       double totalAmount,
-      bool useTestEnvironment) async {
-    final response = await methodChannel.invokeMethod('doPayment', {
-      "saleID": saleID,
-      "poiID": poiID,
+      ) async {
+     await methodChannel.invokeMethod('doPayment', {
       "transactionID": transactionID,
       "items": items,
       "totalAmount": totalAmount,
-      "useTestEnvironment": useTestEnvironment,
     });
-    return response;
   }
 
   @override
-  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
-      double amount, String? transactionID, bool useTestEnvironment) async {
-    final response = await methodChannel.invokeMethod('doRefund', {
-      "saleID": saleID,
-      "poiID": poiID,
-      "amount": amount,
-      "transactionID": transactionID,
-      "useTestEnvironment": useTestEnvironment,
+  Future<void> doRefund({
+    required String transactionID,
+    required List<Map<String, dynamic>> items,
+    required double refundAmount,
+    required String originalSaleID,
+    required String originalPOIID,
+    required String originalPOITransactionID,
+    required String originalPOITransactionTime,
+  }) async {
+    await methodChannel.invokeMethod('doRefund', {
+      'transactionID': transactionID,
+      'items': items,
+      'refundAmount': refundAmount,
+      'originalSaleID': originalSaleID,
+      'originalPOIID': originalPOIID,
+      'originalPOITransactionID': originalPOITransactionID,
+      'originalPOITransactionTime': originalPOITransactionTime,
     });
-    return response;
+  }
+
+  @override
+  Future<String> doAbort() async {
+    final result = await methodChannel.invokeMethod<String>('doAbort');
+    return result!;
   }
 }

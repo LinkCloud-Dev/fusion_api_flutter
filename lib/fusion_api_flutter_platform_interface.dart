@@ -28,64 +28,65 @@ abstract class FusionApiFlutterPlatform extends PlatformInterface {
     return _instance.getPlatformVersion();
   }
 
-  Future<void> init(String saleID, String poiID, String kek) {
-    return _instance.init(saleID, poiID, kek);
+  Future<String> init({
+    required String saleID,
+    required String poiID,
+    required String kek,
+    required bool useTestEnvironment,
+  }) {
+    return _instance.init(
+      saleID: saleID,
+      poiID: poiID,
+      kek: kek,
+      useTestEnvironment: useTestEnvironment,
+    );
   }
 
-  Future<bool> manualLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) {
-    return _instance.manualLogin(
-        saleID,
-        poiID,
-        providerIdentification,
-        applicationName,
-        softwareVersion,
-        certificationCode,
-        useTestEnvironment);
+  // Future<bool> initFromCache() {
+  //   return _instance.initFromCache();
+  // }
+
+  Future<String> login({bool qrPairing = false}) {
+    return _instance.login(qrPairing: qrPairing);
   }
 
-  Future<Map<dynamic, dynamic>> qrLogin(
-      String saleID,
-      String poiID,
-      String providerIdentification,
-      String applicationName,
-      String softwareVersion,
-      String certificationCode,
-      bool useTestEnvironment) {
-    return _instance.qrLogin(
-        saleID,
-        poiID,
-        providerIdentification,
-        applicationName,
-        softwareVersion,
-        certificationCode,
-        useTestEnvironment);
+  // Future<bool> logout(String saleID, String poiID, bool useTestEnvironment) {
+  //   return _instance.logout(saleID, poiID, useTestEnvironment);
+  // }
+  Future<String> logout() {
+    return _instance.logout();
   }
 
-  Future<bool> logout(String saleID, String poiID, bool useTestEnvironment) {
-    return _instance.logout(saleID, poiID, useTestEnvironment);
-  }
-
-  Future<Map<dynamic, dynamic>> doPayment(
-      String saleID,
-      String poiID,
+  Future<void> doPayment(
       String transactionID,
       List<Map<String, dynamic>> items,
       double totalAmount,
-      bool useTestEnvironment) {
-    return _instance.doPayment(
-        saleID, poiID, transactionID, items, totalAmount, useTestEnvironment);
+      ) {
+    return _instance.doPayment(transactionID, items, totalAmount);
   }
 
-  Future<Map<dynamic, dynamic>> doRefund(String saleID, String poiID,
-      double amount, String? transactionID, bool useTestEnvironment) {
+
+  Future<void> doRefund({
+    required String transactionID,
+    required List<Map<String, dynamic>> items,
+    required double refundAmount,
+    required String originalSaleID,
+    required String originalPOIID,
+    required String originalPOITransactionID,
+    required String originalPOITransactionTime,
+  }) {
     return _instance.doRefund(
-        saleID, poiID, amount, transactionID, useTestEnvironment);
+      transactionID: transactionID,
+      items: items,
+      refundAmount: refundAmount,
+      originalSaleID: originalSaleID,
+      originalPOIID: originalPOIID,
+      originalPOITransactionID: originalPOITransactionID,
+      originalPOITransactionTime: originalPOITransactionTime,
+    );
+  }
+
+  Future<String> doAbort() {
+    return _instance.doAbort();
   }
 }

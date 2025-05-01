@@ -1,0 +1,1169 @@
+
+package com.example.fusion_api_flutter
+
+import android.os.Build
+import androidx.annotation.RequiresApi
+import io.flutter.plugin.common.MethodChannel.Result
+import au.com.dmg.fusion.MessageHeader
+import au.com.dmg.fusion.SaleToPOI
+import au.com.dmg.fusion.client.FusionClient
+import au.com.dmg.fusion.data.ErrorCondition
+import au.com.dmg.fusion.data.MessageCategory
+import au.com.dmg.fusion.data.MessageClass
+import au.com.dmg.fusion.data.MessageType
+import au.com.dmg.fusion.data.PaymentInstrumentType
+import au.com.dmg.fusion.data.PaymentType
+import au.com.dmg.fusion.data.SaleCapability
+import au.com.dmg.fusion.data.TerminalEnvironment
+import au.com.dmg.fusion.data.UnitOfMeasure
+import au.com.dmg.fusion.exception.FusionException
+import au.com.dmg.fusion.request.SaleTerminalData
+import au.com.dmg.fusion.request.SaleToPOIRequest
+import au.com.dmg.fusion.request.aborttransactionrequest.AbortTransactionRequest
+import au.com.dmg.fusion.request.loginrequest.LoginRequest
+import au.com.dmg.fusion.request.loginrequest.SaleSoftware
+import au.com.dmg.fusion.request.logoutrequest.LogoutRequest
+import au.com.dmg.fusion.request.paymentrequest.AmountsReq
+import au.com.dmg.fusion.request.paymentrequest.PaymentData
+import au.com.dmg.fusion.request.paymentrequest.PaymentInstrumentData
+import au.com.dmg.fusion.request.paymentrequest.PaymentRequest
+import au.com.dmg.fusion.request.paymentrequest.PaymentTransaction
+import au.com.dmg.fusion.request.paymentrequest.SaleData
+import au.com.dmg.fusion.request.paymentrequest.SaleItem
+import au.com.dmg.fusion.request.paymentrequest.SaleTransactionID
+import au.com.dmg.fusion.request.transactionstatusrequest.MessageReference
+import au.com.dmg.fusion.request.transactionstatusrequest.TransactionStatusRequest
+import au.com.dmg.fusion.response.Response
+import au.com.dmg.fusion.response.ResponseResult
+import au.com.dmg.fusion.response.SaleToPOIResponse
+import au.com.dmg.fusion.util.MessageHeaderUtil
+import au.com.dmg.fusion.util.SecurityTrailerUtil.generateSecurityTrailer
+import java.io.IOException
+import java.math.BigDecimal
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.util.Date
+import java.util.concurrent.*
+
+class FusionAPIManager(private val fusionClient: FusionClient) {
+
+    private var lastTxnServiceID: String? = null
+
+    fun init(saleID: String, poiID: String, kek: String, result: Result) {
+        fusionClient.setSettings(saleID, poiID, kek)
+        result.success(null)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun initiateTransaction(
+            saleID: String,
+            poiID: String,
+            providerIdentification: String,
+            applicationName: String,
+            softwareVersion: String,
+            certificationCode: String,
+            qrPairing: Boolean,
+            useTestEnvironment: Boolean,
+            result: Result
+    ) {
+        try {
+            //            fusionClient.connect()
+            //
+            //            if (login(
+            //                    saleID,
+            //                    poiID,
+            //                    providerIdentification,
+            //                    applicationName,
+            //                    softwareVersion,
+            //                    certificationCode,
+            //                    qrPairing,
+            //                    useTestEnvironment,
+            //                result
+            //                )
+            //            ) {
+            //                doPayment(saleID, poiID, useTestEnvironment)
+            //            }
+            //            fusionClient.disconnect()
+        } catch (e: IOException) {
+            log(e)
+        } catch (e: FusionException) {
+            log(e)
+        }
+    }
+
+    fun manualLogin(
+            saleID: String,
+            poiID: String,
+            providerIdentification: String,
+            applicationName: String,
+            softwareVersion: String,
+            certificationCode: String,
+            useTestEnvironment: Boolean,
+            result: Result
+    ) {
+        val executor = Executors.newSingleThreadExecutor()
+        var loginSuccess = false
+        val login =
+                executor.submit<Boolean> {
+                    var loginRequest: SaleToPOIRequest?
+                    // Payment request
+                    try {
+                        loginRequest =
+                                buildLoginRequest(
+                                        saleID,
+                                        poiID,
+                                        providerIdentification,
+                                        applicationName,
+                                        softwareVersion,
+                                        certificationCode,
+                                        false,
+                                        useTestEnvironment,
+                                )
+
+                        log("Sending message to websocket server:\n$loginRequest")
+                        fusionClient.sendMessage(loginRequest)
+
+                        // Wait for response & handle
+                        var waitingForResponse = true // TODO: timeout handling
+                        while (waitingForResponse) {
+                            val saleToPOI = fusionClient.readMessage() ?: continue
+
+                            if (saleToPOI is SaleToPOIResponse) {
+                                waitingForResponse = handleLoginResponseMessage(saleToPOI)
+                                if (getLoginResult(saleToPOI) == ResponseResult.Success) {
+                                    loginSuccess = true
+                                } else {
+                                    loginSuccess = false
+                                }
+                            }
+                        }
+                    } catch (e: FusionException) {
+                        log(e)
+                    } catch (e: Exception) {
+                        log(e)
+                    }
+
+                    loginSuccess
+                }
+
+        try {
+            loginSuccess = login.get(60, TimeUnit.SECONDS) // set timeout
+        } catch (e: TimeoutException) {
+            System.err.println("Payment Request Timeout...")
+        } catch (e: ExecutionException) {
+            log("Exception: $e")
+        } catch (e: InterruptedException) {
+            log("Exception: $e")
+        }
+        result.success(loginSuccess)
+    }
+
+    fun qrLogin(
+            saleID: String,
+            poiID: String,
+            providerIdentification: String,
+            applicationName: String,
+            softwareVersion: String,
+            certificationCode: String,
+            useTestEnvironment: Boolean,
+            result: Result
+    ) {
+        var newPoiID = ""
+        var loginResult = ""
+        val executor = Executors.newSingleThreadExecutor()
+        val login =
+                executor.submit<Map<String, String?>> {
+                    var loginRequest: SaleToPOIRequest?
+                    var _newPoiID: String? = null
+                    var _loginResult: String? = null
+                    // Payment request
+                    try {
+                        loginRequest =
+                                buildLoginRequest(
+                                        saleID,
+                                        poiID,
+                                        providerIdentification,
+                                        applicationName,
+                                        softwareVersion,
+                                        certificationCode,
+                                        true,
+                                        useTestEnvironment,
+                                )
+
+                        log("Sending message to websocket server:\n$loginRequest")
+                        fusionClient.sendMessage(loginRequest)
+
+                        // Wait for response & handle
+                        var waitingForResponse = true // TODO: timeout handling
+                        while (waitingForResponse) {
+                            val saleToPOI = fusionClient.readMessage() ?: continue
+
+                            if (saleToPOI is SaleToPOIResponse) {
+                                waitingForResponse = handleLoginResponseMessage(saleToPOI)
+                                _loginResult = if (getLoginResult(saleToPOI) == ResponseResult.Success) {
+                                    "Success"
+                                } else {
+                                    "Failure"
+                                }
+                                _newPoiID = getPOIID(saleToPOI)
+                            }
+                        }
+                    } catch (e: FusionException) {
+                        log(e)
+                    } catch (e: Exception) {
+                        log(e)
+                    }
+
+                    val results = mapOf("newPoiID" to _newPoiID, "loginResult" to _loginResult)
+                    results
+                }
+
+        try {
+            val returnValues = login.get(60, TimeUnit.SECONDS) // set timeout
+            newPoiID = returnValues["newPoiID"].toString()
+            loginResult = returnValues["loginResult"].toString()
+        } catch (e: TimeoutException) {
+            System.err.println("Payment Request Timeout...")
+        } catch (e: ExecutionException) {
+            log("Exception: $e")
+        } catch (e: InterruptedException) {
+            log("Exception: $e")
+        }
+        val values = mapOf("newPoiID" to newPoiID, "loginResult" to loginResult)
+        result.success(values)
+    }
+
+    fun logout(saleID: String, poiID: String, useTestEnvironment: Boolean, result: Result) {
+        val executor = Executors.newSingleThreadExecutor()
+        val logout =
+                executor.submit<Boolean> {
+                    var logoutRequest: SaleToPOIRequest?
+                    var gotValidResponse = false
+                    // Payment request
+                    try {
+                        logoutRequest = buildLogoutRequest(saleID, poiID, useTestEnvironment)
+
+                        log("Sending message to websocket server:\n$logoutRequest")
+                        fusionClient.sendMessage(logoutRequest)
+
+                        // Wait for response & handle
+                        var waitingForResponse = true // TODO: timeout handling
+                        while (waitingForResponse) {
+                            val saleToPOI = fusionClient.readMessage() ?: continue
+
+                            if (saleToPOI is SaleToPOIResponse) {
+                                waitingForResponse = handleLoginResponseMessage(saleToPOI)
+                                gotValidResponse = true
+                            }
+                        }
+                    } catch (e: FusionException) {
+                        log(e)
+                    } catch (e: Exception) {
+                        log(e)
+                    }
+
+                    gotValidResponse
+                }
+
+        var gotValidResponse = false
+        try {
+            gotValidResponse = logout.get(60, TimeUnit.SECONDS) // set timeout
+        } catch (e: TimeoutException) {
+            System.err.println("Payment Request Timeout...")
+        } catch (e: ExecutionException) {
+            log("Exception: $e")
+        } catch (e: InterruptedException) {
+            log("Exception: $e")
+        }
+        result.success(gotValidResponse)
+    }
+
+    @Throws(Exception::class)
+    private fun buildLoginRequest(
+            saleID: String,
+            poiID: String,
+            providerIdentification: String,
+            applicationName: String,
+            softwareVersion: String,
+            certificationCode: String,
+            qrPairing: Boolean,
+            useTestEnvironment: Boolean,
+    ): SaleToPOIRequest {
+        // Login Request
+        val saleSoftware =
+                SaleSoftware.Builder()
+                        .providerIdentification(providerIdentification)
+                        .applicationName(applicationName)
+                        .softwareVersion(softwareVersion)
+                        .certificationCode(certificationCode)
+                        .build()
+
+        val saleCapabilities =
+                listOf(
+                        SaleCapability.CashierStatus,
+                        SaleCapability.CustomerAssistance,
+                        SaleCapability.PrinterReceipt
+                )
+
+        val saleTerminalData =
+                SaleTerminalData.Builder()
+                        .terminalEnvironment(TerminalEnvironment.SemiAttended)
+                        .saleCapabilities(saleCapabilities)
+                        .build()
+
+        val currentDateTime = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").format(Date()).toString()
+
+        val loginRequest =
+                LoginRequest.Builder()
+                        .dateTime(currentDateTime)
+                        .saleSoftware(saleSoftware)
+                        .saleTerminalData(saleTerminalData)
+                        .operatorLanguage("en")
+                        .pairing(qrPairing)
+                        .build()
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder()
+                        .messageClass(MessageClass.Service)
+                        .messageCategory(MessageCategory.Login)
+                        .messageType(MessageType.Request)
+                        .serviceID(MessageHeaderUtil.generateServiceID(10))
+                        .saleID(saleID)
+                        .POIID(poiID)
+                        .build()
+
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, loginRequest, useTestEnvironment)
+
+        return SaleToPOIRequest.Builder()
+                .messageHeader(messageHeader)
+                .request(loginRequest)
+                .securityTrailer(securityTrailer)
+                .build()
+    }
+
+    @Throws(Exception::class)
+    private fun buildLogoutRequest(
+            saleID: String,
+            poiID: String,
+            useTestEnvironment: Boolean
+    ): SaleToPOIRequest {
+
+        val logoutRequest = LogoutRequest()
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder()
+                        .messageClass(MessageClass.Service)
+                        .messageCategory(MessageCategory.Logout)
+                        .messageType(MessageType.Request)
+                        .serviceID(MessageHeaderUtil.generateServiceID(10))
+                        .saleID(saleID)
+                        .POIID(poiID)
+                        .build()
+
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, logoutRequest, useTestEnvironment)
+
+        return SaleToPOIRequest.Builder()
+                .messageHeader(messageHeader)
+                .request(logoutRequest)
+                .securityTrailer(securityTrailer)
+                .build()
+    }
+
+    private fun handleLoginResponseMessage(msg: SaleToPOI): Boolean {
+        var waitingForResponse = true
+        val messageCategory: MessageCategory
+        if (msg is SaleToPOIResponse) {
+            val response: SaleToPOIResponse = msg
+            log(String.format("Response(JSON): %s", response.toJson()))
+            response.messageHeader
+            messageCategory = response.messageHeader.messageCategory
+
+            var responseBody: Response?
+            log("Message Category: $messageCategory")
+            when (messageCategory) {
+                MessageCategory.Event -> {
+                    val eventNotification = response.eventNotification
+                    log("Event Details: " + eventNotification!!.eventDetails)
+                }
+                MessageCategory.Login ->
+                        if (response.loginResponse != null) {
+                            response.loginResponse!!.response
+                            responseBody = response.loginResponse!!.response
+                            if (responseBody.result != null) {
+                                log(
+                                        java.lang.String.format(
+                                                "Login Result: %s ",
+                                                responseBody.result
+                                        )
+                                )
+                                if (responseBody.result !== ResponseResult.Success) {
+                                    log(
+                                            java.lang.String.format(
+                                                    "Error Condition: %s, Additional Response: %s",
+                                                    responseBody.errorCondition,
+                                                    responseBody.additionalResponse
+                                            )
+                                    )
+                                }
+                            }
+                            waitingForResponse = false
+                        }
+                MessageCategory.Logout ->
+                        if (response.logoutResponse != null) {
+                            response.logoutResponse!!.response
+                            responseBody = response.logoutResponse!!.response
+                            if (responseBody.result != null) {
+                                log(
+                                        java.lang.String.format(
+                                                "Logout Result: %s ",
+                                                responseBody.result
+                                        )
+                                )
+                                if (responseBody.result !== ResponseResult.Success) {
+                                    log(
+                                            java.lang.String.format(
+                                                    "Error Condition: %s, Additional Response: %s",
+                                                    responseBody.errorCondition,
+                                                    responseBody.additionalResponse
+                                            )
+                                    )
+                                }
+                            }
+                            waitingForResponse = false
+                        }
+                else ->
+                        log(
+                                "$messageCategory received during Payment response message " +
+                                        "handling."
+                        )
+            }
+        } else log("Unexpected response message received.")
+        return waitingForResponse
+    }
+
+    private fun getPOIID(msg: SaleToPOI): String {
+        return if (msg is SaleToPOIResponse) {
+            val response: SaleToPOIResponse = msg
+            response.messageHeader.poiID
+        } else ""
+    }
+
+    private fun getLoginResult(msg: SaleToPOI): ResponseResult? {
+        return if (msg is SaleToPOIResponse) {
+            val response: SaleToPOIResponse = msg
+            response.loginResponse!!.response.result
+        } else null
+    }
+
+    private fun getLogoutResult(msg: SaleToPOI): ResponseResult? {
+        return if (msg is SaleToPOIResponse) {
+            val response: SaleToPOIResponse = msg
+            response.logoutResponse!!.response.result
+        } else null
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun doPayment(
+            saleID: String,
+            poiID: String,
+            transactionID: String,
+            items: List<MutableMap<String, Any>>,
+            totalAmount: Double,
+            useTestEnvironment: Boolean,
+            result: Result
+    ) {
+        val serviceID = MessageHeaderUtil.generateServiceID(10)
+        lastTxnServiceID = serviceID //记录当前交易 ID
+        val executor = Executors.newSingleThreadExecutor()
+        log("111111!!!!!!!!!1111 just generate serviceID : ${serviceID}")
+        // var abortReason = ""
+        var responseResult: Map<String, Boolean>? = null
+        val payment =
+                executor.submit<Map<String, Boolean>?> {
+                    var paymentRequest: SaleToPOIRequest?
+                    var responseResults: Map<String, Boolean>? = null
+                    var gotValidResponse = false
+                    // Payment request
+                    try {
+                        paymentRequest =
+                                buildPaymentRequest(
+                                        saleID,
+                                        poiID,
+                                        serviceID,
+                                        transactionID,
+                                        items,
+                                        totalAmount,
+                                        useTestEnvironment
+                                )
+                        log(".....Sending message to websocket server: \n......$paymentRequest")
+                        log("....Is connected: ${fusionClient.isConnected()}")
+                        fusionClient.sendMessage(paymentRequest)
+                        
+                        val startTime = System.currentTimeMillis()
+                        val timeoutMillis = 60_000 // 最长等待 30 秒
+
+                        // Wait for response & handle
+                        var waitingForResponse = true // TODO: timeout handling
+                        while (waitingForResponse && System.currentTimeMillis() - startTime < timeoutMillis) {
+                            val msg = fusionClient.readMessage() ?: continue
+
+                            if (msg is SaleToPOIResponse) {
+                                log(".......here are responses!!!!!!!!")
+                                val category = msg.messageHeader.messageCategory
+
+                                when (category) {
+                                    MessageCategory.Abort -> {
+                                        // val resultStatus = msg.abortResponse?.response?.result
+                                        log("🛑 Received Abort Response, continuing to listen...")
+                                    }
+
+                                    MessageCategory.Payment -> {
+                                        responseResults = handlePaymentResponseMessage(msg)
+                                        log("111111111111111 ")
+                                        waitingForResponse = responseResults?.get("WaitingForAnotherResponse") ?: false
+                                    }
+
+                                    MessageCategory.Event -> {
+                                        log(" Event: ${msg.eventNotification?.eventDetails}")
+                                    }
+
+                                    else -> {
+                                        log(" Ignored Response Category: $category")
+                                    }
+                                }
+                            } else if (msg is SaleToPOIRequest) {
+                                handleRequestMessage(msg)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        log("❌ Exception in doPayment: ${e.message}")
+                    }
+                    responseResults
+                }
+
+    try {
+        val responseResult = payment[60, TimeUnit.SECONDS]
+        result.success(responseResult)
+    } catch (e: Exception) {
+        log("❌ Payment failed with exception: ${e.message}")
+        result.success(mapOf("Result" to false))
+    } finally {
+        executor.shutdownNow()
+    }
+}
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Throws(Exception::class)
+    private fun buildPaymentRequest(
+            saleID: String,
+            poiID: String,
+            serviceID: String,
+            transactionID: String,
+            items: List<MutableMap<String, Any>>,
+            totalAmount: Double,
+            useTestEnvironment: Boolean
+    ): SaleToPOIRequest? {
+        // Payment Request
+        // val saleTransactionID =
+        //         SaleTransactionID.Builder() //
+        //                 .transactionID(
+        //                         "transactionID" +
+        //                                 SimpleDateFormat("HH:mm:ssXXX").format(Date()).toString()
+        //                 )
+        //                 .timestamp(Instant.now())
+        //                 .build()
+        val saleTransactionID =
+                SaleTransactionID.Builder() //
+                        .transactionID(transactionID)
+                        .timestamp(Instant.now())
+                        .build()
+        val saleData =
+                SaleData.Builder() //
+                        // .operatorID("")//
+                        .operatorLanguage("en") //
+                        .saleTransactionID(saleTransactionID) //
+                        .build()
+        // TODO: Test the saleItems
+        val saleItems = mutableListOf<SaleItem>()
+        items.forEachIndexed() { index, item ->
+            val saleItem =
+                    SaleItem.Builder() //
+                            .itemID(index) //
+                            .productCode(item["productCode"].toString()) //
+                            .unitOfMeasure(UnitOfMeasure.Other) //
+                            .quantity(BigDecimal(item["quantity"].toString())) //
+                            .unitPrice(BigDecimal(item["unitPrice"].toString())) //
+                            .itemAmount(BigDecimal(item["itemAmount"].toString())) //
+                            .productLabel(item["productLabel"].toString()) //
+                            .build()
+            saleItems.add(saleItem)
+        }
+        val amountsReq =
+                AmountsReq.Builder() //
+                        .currency("AUD") //
+                        .requestedAmount(BigDecimal(totalAmount)) //
+                        .build()
+        val paymentInstrumentData: PaymentInstrumentData =
+                PaymentInstrumentData.Builder() //
+                        .paymentInstrumentType(PaymentInstrumentType.Card) //
+                        .build()
+        val paymentData =
+                PaymentData.Builder() //
+                        .paymentType(PaymentType.Normal) //
+                        .paymentInstrumentData(paymentInstrumentData) //
+                        .build()
+        val paymentTransaction =
+                PaymentTransaction.Builder() //
+                        .amountsReq(amountsReq) //
+                        .addSaleItems(saleItems) //
+                        .build()
+        val paymentRequest =
+                PaymentRequest.Builder() //
+                        .paymentTransaction(paymentTransaction) //
+                        .paymentData(paymentData) //
+                        .saleData(saleData)
+                        .build()
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder() //
+                        .messageClass(MessageClass.Service) //
+                        .messageCategory(MessageCategory.Payment) //
+                        .messageType(MessageType.Request) //
+                        .serviceID(serviceID) //
+                        .saleID(saleID) //
+                        .POIID(poiID) //
+                        .build()
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, paymentRequest, useTestEnvironment)
+        return SaleToPOIRequest.Builder() //
+                .messageHeader(messageHeader) //
+                .request(paymentRequest) //
+                .securityTrailer(securityTrailer) //
+                .build()
+    }
+
+    private fun handleRequestMessage(msg: SaleToPOI) {
+        var messageCategory = MessageCategory.Other
+        if (msg is SaleToPOIRequest) {
+            log(String.format("Request(JSON): %s", msg.toJson()))
+            if (msg.messageHeader != null) messageCategory = msg.messageHeader.messageCategory
+            if (messageCategory == MessageCategory.Display) {
+                val displayRequest = msg.displayRequest
+                if (displayRequest != null) {
+                    log("Display Output = " + displayRequest.displayText)
+                }
+            } else log("$messageCategory received during response message handling.")
+        } else log("Unexpected request message received.")
+    }
+
+    private fun handlePaymentResponseMessage(msg: SaleToPOI): Map<String, Boolean> {
+        var responseResult: MutableMap<String, Boolean> = HashMap()
+        val messageCategory: MessageCategory
+        if (msg is SaleToPOIResponse) {
+            log(String.format("Response(JSON): %s", msg.toJson()))
+            msg.messageHeader
+            messageCategory = msg.messageHeader.messageCategory
+            var responseBody: Response?
+            log("Message Category: $messageCategory")
+            when (messageCategory) {
+                MessageCategory.Event -> {
+                    val eventNotification = msg.eventNotification
+                    log("Event Details: " + eventNotification!!.eventDetails)
+                }
+                MessageCategory.Payment -> {
+                    responseBody = msg.paymentResponse!!.response
+                    if (responseBody.result != null) {
+                        log(String.format("Payment Result: %s", responseBody.result))
+                        if (responseBody.result != ResponseResult.Success) {
+                            log(
+                                    String.format(
+                                            "Error Condition: %s, Additional Response: %s",
+                                            responseBody.errorCondition,
+                                            responseBody.additionalResponse
+                                    )
+                            )
+                            responseResult["Result"] = false
+                        } else {
+                            responseResult["Result"] = true
+                        }
+                        responseResult["GotValidResponse"] = true
+                    } else {
+                        responseResult["GotValidResponse"] = false
+                    }
+                    responseResult["WaitingForAnotherResponse"] = false
+                }
+                // Add Refund response handling
+                else ->
+                        log(
+                                "$messageCategory received during Payment response message " +
+                                        "handling."
+                        )
+            }
+        } else log("Unexpected response message received.")
+        return responseResult
+    }
+
+    private fun checkTransactionStatus(
+            saleID: String,
+            poiID: String,
+            serviceID: String,
+            abortReason: String,
+            useTestEnvironment: Boolean
+    ) {
+        log("Sending transaction status request to check status of payment...")
+        val executor = Executors.newSingleThreadExecutor()
+        val transaction =
+                executor.submit<Boolean> {
+                    var transactionStatusRequest: SaleToPOIRequest?
+                    var gotValidResponse = false
+                    try {
+                        if (abortReason !== "") {
+                            val abortTransactionPOIRequest: SaleToPOIRequest =
+                                    buildAbortRequest(
+                                            saleID,
+                                            poiID,
+                                            serviceID,
+                                            abortReason,
+                                            useTestEnvironment
+                                    )
+                            log(
+                                    "Sending abort message to websocket server: " +
+                                            "\n$abortTransactionPOIRequest"
+                            )
+                            fusionClient.sendMessage(abortTransactionPOIRequest)
+                        }
+                        var buildAndSendRequestMessage = true
+                        var waitingForResponse = true
+                        while (waitingForResponse) {
+                            if (buildAndSendRequestMessage) {
+                                transactionStatusRequest =
+                                        buildTransactionStatusRequest(
+                                                saleID,
+                                                poiID,
+                                                serviceID,
+                                                useTestEnvironment
+                                        )
+                                log(
+                                        "Sending message to websocket server: \n$transactionStatusRequest"
+                                )
+                                fusionClient.sendMessage(transactionStatusRequest)
+                            }
+                            buildAndSendRequestMessage = false
+                            val saleToPOI = fusionClient.readMessage() ?: continue
+                            val responseResult: Map<String, Boolean> =
+                                    handleTransactionResponseMessage(saleToPOI)
+                            waitingForResponse = responseResult["WaitingForAnotherResponse"] ?: true
+                            if (waitingForResponse) {
+                                buildAndSendRequestMessage =
+                                        responseResult["BuildAndSendRequestMessage"] ?: false
+                            } else {
+                                gotValidResponse = responseResult["GotValidResponse"] ?: false
+                            }
+                        }
+                    } catch (e: Exception) {
+                        log(java.lang.String.format("ConfigurationException: %s", e.toString()))
+                    } catch (e: FusionException) {
+                        log(String.format("NotConnectedException: %s", e.toString()))
+                    }
+                    gotValidResponse
+                }
+        try {
+            transaction[90, TimeUnit.SECONDS] // set timeout
+        } catch (e: TimeoutException) {
+            System.err.println("Transaction Status Timeout...")
+        } catch (e: ExecutionException) {
+            log(String.format("Exception: %s", e.toString()))
+        } catch (e: InterruptedException) {
+            log(String.format("Exception: %s", e.toString()))
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Throws(Exception::class)
+    private fun buildTransactionStatusRequest(
+            saleID: String,
+            poiID: String,
+            serviceID: String,
+            useTestEnvironment: Boolean
+    ): SaleToPOIRequest? {
+        // Transaction Status Request
+        val messageReference =
+                MessageReference.Builder() //
+                        .messageCategory(MessageCategory.Payment) //
+                        .POIID(poiID) //
+                        .saleID(saleID) //
+                        .serviceID(serviceID) //
+                        .build()
+        val transactionStatusRequest = TransactionStatusRequest(messageReference)
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder() //
+                        .messageClass(MessageClass.Service) //
+                        .messageCategory(MessageCategory.TransactionStatus) //
+                        .messageType(MessageType.Request) //
+                        .serviceID(MessageHeaderUtil.generateServiceID(10)) //
+                        .saleID(saleID) //
+                        .POIID(poiID) //
+                        .build()
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, transactionStatusRequest, useTestEnvironment)
+        return SaleToPOIRequest.Builder() //
+                .messageHeader(messageHeader) //
+                .request(transactionStatusRequest) //
+                .securityTrailer(securityTrailer) //
+                .build()
+    }
+
+    fun doAbort(
+        saleID: String,
+        poiID: String,
+        abortReason: String,
+        useTestEnvironment: Boolean,
+        result: Result
+    ) {
+        log(" ！！！！！！！！abort abort！！！！！！！！.")
+
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute {
+        try {
+            val serviceID = lastTxnServiceID ?: run {
+                log(" No active serviceID to abort.")
+                result.success(false)
+                return@execute
+            }
+
+            val abortRequest = buildAbortRequest(
+                saleID, poiID, serviceID, abortReason, useTestEnvironment
+            )
+
+            fusionClient.sendMessage(abortRequest)
+            log("Sent Abort for serviceID=$serviceID (reason: $abortReason)")
+
+            // 不处理响应，交由 payment 的监听逻辑来收
+            result.success(true)
+        } catch (e: Exception) {
+            log(" doAbort failed: ${e.message}")
+            result.success(false)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+    }
+
+    @Throws(Exception::class)
+    private fun buildAbortRequest(
+            saleID: String,
+            poiID: String,
+            paymentServiceID: String,
+            abortReason: String,
+            useTestEnvironment: Boolean
+    ): SaleToPOIRequest {
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder() //
+                        .messageClass(MessageClass.Service) //
+                        .messageCategory(MessageCategory.Abort) //
+                        .messageType(MessageType.Request) //
+                        .serviceID(MessageHeaderUtil.generateServiceID(10)) //
+                        .saleID(saleID) //
+                        .POIID(poiID) //
+                        .build()
+        val messageReference =
+                MessageReference.Builder()
+                        .messageCategory(MessageCategory.Abort)
+                        .serviceID(paymentServiceID)
+                        .build()
+        val abortTransactionRequest = AbortTransactionRequest(messageReference, abortReason)
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, abortTransactionRequest, useTestEnvironment)
+        return SaleToPOIRequest.Builder() //
+                .messageHeader(messageHeader) //
+                .request(abortTransactionRequest) //
+                .securityTrailer(securityTrailer) //
+                .build()
+    }
+
+    private fun handleTransactionResponseMessage(msg: SaleToPOI): Map<String, Boolean> {
+        val responseResult: MutableMap<String, Boolean> = HashMap()
+        var messageCategory = MessageCategory.Other
+        if (msg is SaleToPOIResponse) {
+            log(String.format("Response(JSON): %s", msg.toJson()))
+            msg.messageHeader
+            messageCategory = msg.messageHeader.messageCategory
+            var responseBody: Response?
+            log("Message Category: $messageCategory")
+            when (messageCategory) {
+                MessageCategory.Event -> {
+                    val eventNotification = msg.eventNotification
+                    log("Event Details: " + eventNotification!!.eventDetails)
+                }
+                MessageCategory.TransactionStatus -> {
+                    if (msg.transactionStatusResponse != null &&
+                                    msg.transactionStatusResponse!!.response != null
+                    ) {
+                        responseBody = msg.transactionStatusResponse!!.response
+                        if (responseBody.result != null) {
+                            log(
+                                    String.format(
+                                            "Transaction Status Result: %s ",
+                                            responseBody.result
+                                    )
+                            )
+                            if (responseBody.result == ResponseResult.Success) {
+                                var paymentResponseBody: Response? = null
+                                if (msg.transactionStatusResponse!!.repeatedMessageResponse !=
+                                                null &&
+                                                msg.transactionStatusResponse!!
+                                                        .repeatedMessageResponse
+                                                        .repeatedResponseMessageBody != null &&
+                                                msg.transactionStatusResponse!!
+                                                        .repeatedMessageResponse
+                                                        .repeatedResponseMessageBody
+                                                        .paymentResponse != null
+                                ) {
+                                    paymentResponseBody =
+                                            msg.transactionStatusResponse!!
+                                                    .repeatedMessageResponse
+                                                    .repeatedResponseMessageBody
+                                                    .paymentResponse
+                                                    .response
+                                }
+                                if (paymentResponseBody != null) {
+                                    log(
+                                            String.format(
+                                                    "Actual Payment Result: %s",
+                                                    paymentResponseBody.result
+                                            )
+                                    )
+                                    if (paymentResponseBody.errorCondition != null ||
+                                                    paymentResponseBody.additionalResponse != null
+                                    ) {
+                                        log(
+                                                String.format(
+                                                        "Error Condition: %s, Additional Response: %s",
+                                                        paymentResponseBody.errorCondition,
+                                                        paymentResponseBody.additionalResponse
+                                                )
+                                        )
+                                    }
+                                }
+                                responseResult["GotValidResponse"] = true
+                                responseResult["WaitingForAnotherResponse"] = false
+                            } else if (responseBody.errorCondition == ErrorCondition.InProgress) {
+                                log("Payment in progress...")
+                                log(
+                                        String.format(
+                                                "Error Condition: %s, Additional Response: %s",
+                                                responseBody.errorCondition,
+                                                responseBody.additionalResponse
+                                        )
+                                )
+                                responseResult["BuildAndSendRequestMessage"] = true
+                            } else {
+                                log(
+                                        String.format(
+                                                "Error Condition: %s, Additional Response: %s",
+                                                responseBody.errorCondition,
+                                                responseBody.additionalResponse
+                                        )
+                                )
+                                responseResult["GotValidResponse"] = true
+                                responseResult["WaitingForAnotherResponse"] = false
+                            }
+                        }
+                    }
+                    log(
+                            "$messageCategory received during Transaction Status response message handling."
+                    )
+                }
+                else ->
+                        log(
+                                "$messageCategory received during Transaction Status response message handling."
+                        )
+            }
+        } else log("Unexpected response message received.")
+        return responseResult
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun doRefund(
+            saleID: String,
+            poiID: String,
+            amount: Double,
+            transactionID: String?,
+            useTestEnvironment: Boolean,
+            result: Result
+    ) {
+        val serviceID = MessageHeaderUtil.generateServiceID(10)
+        val executor = Executors.newSingleThreadExecutor()
+        var abortReason = ""
+        var responseResult: Map<String, Boolean>? = null
+        val refund =
+                executor.submit<Map<String, Boolean>?> {
+                    var refundRequest: SaleToPOIRequest?
+                    var responseResults: Map<String, Boolean>? = null
+                    var gotValidResponse = false
+                    // Payment request
+                    try {
+                        refundRequest =
+                                buildRefundRequest(
+                                        saleID,
+                                        poiID,
+                                        serviceID,
+                                        amount,
+                                        transactionID,
+                                        useTestEnvironment
+                                )
+                        log("Sending message to websocket server: \n$refundRequest")
+                        fusionClient.sendMessage(refundRequest)
+
+                        // Wait for response & handle
+                        var waitingForResponse = true // TODO: timeout handling
+                        while (waitingForResponse) {
+                            val saleToPOI = fusionClient.readMessage() ?: continue
+                            if (saleToPOI is SaleToPOIRequest) {
+                                handleRequestMessage(saleToPOI)
+                                continue
+                            }
+                            if (saleToPOI is SaleToPOIResponse) {
+                                responseResults =
+                                        handlePaymentResponseMessage(saleToPOI)
+                                waitingForResponse =
+                                        responseResults["WaitingForAnotherResponse"] ?: true
+                                if (!waitingForResponse) {
+                                    gotValidResponse =
+                                            responseResults["GotValidResponse"] ?: false
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        log(e)
+                    } catch (e: FusionException) {
+                        log(e)
+                    }
+                    responseResults
+                }
+        var gotValidResponse = false
+        try {
+            responseResult = refund[60, TimeUnit.SECONDS] // set timeout
+            gotValidResponse = responseResult?.get("GotValidResponse") ?: false // set timeout
+        } catch (e: TimeoutException) {
+            System.err.println("Payment Request Timeout...")
+            abortReason = "Timeout"
+        } catch (e: ExecutionException) {
+            log(String.format("Exception: %s", e.toString()))
+            abortReason = "Other Exception"
+        } catch (e: InterruptedException) {
+            log(String.format("Exception: %s", e.toString()))
+            abortReason = "Other Exception"
+        } finally {
+            executor.shutdownNow()
+            if (!gotValidResponse)
+                    checkTransactionStatus(
+                            saleID,
+                            poiID,
+                            serviceID,
+                            abortReason,
+                            useTestEnvironment
+                    )
+        }
+        result.success(responseResult)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildRefundRequest(
+            saleID: String,
+            poiID: String,
+            serviceID: String,
+            amount: Double,
+            transactionID: String?,
+            useTestEnvironment: Boolean
+    ): SaleToPOIRequest? {
+        // Refund Request
+        // TODO: Change to use the original transactionID
+        val saleTransactionID: SaleTransactionID
+        if (transactionID == null) {
+            saleTransactionID =
+                    SaleTransactionID.Builder() //
+                            .transactionID(
+                                    "transactionID" +
+                                            SimpleDateFormat("HH:mm:ssXXX")
+                                                    .format(Date())
+                                                    .toString()
+                            )
+                            .timestamp(Instant.now())
+                            .build()
+        } else {
+            saleTransactionID =
+                    SaleTransactionID.Builder() //
+                            .transactionID(transactionID)
+                            .timestamp(Instant.now())
+                            .build()
+        }
+        val saleData =
+                SaleData.Builder() //
+                        // .operatorID("")//
+                        .operatorLanguage("en") //
+                        .saleTransactionID(saleTransactionID) //
+                        .build()
+        val amountsReq =
+                AmountsReq.Builder() //
+                        .currency("AUD") //
+                        .requestedAmount(BigDecimal(amount)) //
+                        .build()
+        val paymentInstrumentData: PaymentInstrumentData =
+                PaymentInstrumentData.Builder() //
+                        .paymentInstrumentType(PaymentInstrumentType.Card) //
+                        .build()
+        val paymentData =
+                PaymentData.Builder() //
+                        .paymentType(PaymentType.Refund) //
+                        .paymentInstrumentData(paymentInstrumentData) //
+                        .build()
+        val paymentTransaction =
+                PaymentTransaction.Builder() //
+                        .amountsReq(amountsReq) //
+                        .build()
+        val refundRequest =
+                PaymentRequest.Builder() //
+                        .paymentTransaction(paymentTransaction) //
+                        .paymentData(paymentData) //
+                        .saleData(saleData)
+                        .build()
+
+        // Message Header
+        val messageHeader =
+                MessageHeader.Builder() //
+                        .messageClass(MessageClass.Service) //
+                        .messageCategory(MessageCategory.Payment) //
+                        .messageType(MessageType.Request) //
+                        .serviceID(serviceID) //
+                        .saleID(saleID) //
+                        .POIID(poiID) //
+                        .build()
+        val securityTrailer =
+                generateSecurityTrailer(messageHeader, refundRequest, useTestEnvironment)
+        return SaleToPOIRequest.Builder() //
+                .messageHeader(messageHeader) //
+                .request(refundRequest) //
+                .securityTrailer(securityTrailer) //
+                .build()
+    }
+
+    private fun log(ex: java.lang.Exception) {
+        log(ex.message)
+    }
+
+    private fun log(logData: String?) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+        println(sdf.format(Date(System.currentTimeMillis())) + " " + logData) // 2021.03.24.16.34.26
+    }
+    }

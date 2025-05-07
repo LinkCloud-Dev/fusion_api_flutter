@@ -68,6 +68,19 @@ class FusionApiFlutter {
     );
   }
 
+  Future<void> doUnmatchedRefund({
+    required String transactionID,
+    required List<Map<String, dynamic>> items,
+    required double refundAmount,
+  }) {
+    return FusionApiFlutterPlatform.instance.doUnmatchedRefund(
+      transactionID: transactionID,
+      items: items,
+      refundAmount: refundAmount,
+    );
+  }
+
+
   Future<String> doAbort() {
     return FusionApiFlutterPlatform.instance.doAbort();
   }

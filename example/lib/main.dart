@@ -25,29 +25,30 @@ class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
 
   static const MethodChannel fusionChannel = MethodChannel('fusion_api_flutter');
+  // static const EventChannel _fusionEventChannel = EventChannel('fusion_plugin/events');
 
   final _fusionApiFlutterPlugin = FusionApiFlutter();
 
   // Cashier Configurable
-  String saleID = 'INT POS';
-  String poiID = 'LINKPOS0';
-  String kek = '44DACB2A22A4A752ADC1BBFFE6CEFB589451E0FFD83F8B21';
+  String saleID = 'LinkPos';
+  String poiID = 'LINKPOS1';
+  String kek = '7F1E8AA14851D1C41E254C6EFCBE44296ED7F8FB496F312D';
 
   // For QR pairing
   String qrSaleID = "";
   String qrPoiID = "";
   String qrKek = "";
 
-  final String certificationCode = '98cf9dfc-0db7-4a92-8b8cb66d4d2d7169';
+  final String certificationCode = 'fbee5ab6-2c16-4395-872e-aaa57b1b86b9';
   final String posName = 'LinkPOS';
   final int version = 1;
 
   String _statusMessage = '';
 
   bool isQRLogin = false;
-  TextEditingController saleIDController = TextEditingController(text: 'INT POS');
-  TextEditingController poiIDController = TextEditingController(text: 'LINKPOS0');
-  TextEditingController kekController = TextEditingController(text: '44DACB2A22A4A752ADC1BBFFE6CEFB589451E0FFD83F8B21');
+  TextEditingController saleIDController = TextEditingController(text: 'LinkPos');
+  TextEditingController poiIDController = TextEditingController(text: 'LINKPOS1');
+  TextEditingController kekController = TextEditingController(text: '7F1E8AA14851D1C41E254C6EFCBE44296ED7F8FB496F312D');
   bool manualLoginLocked = false;
 
   @override
@@ -165,6 +166,49 @@ class _MyAppState extends State<MyApp> {
       }
     });
   }
+  //
+  // void setupCallback() {
+  //   _fusionEventChannel.receiveBroadcastStream().listen((event) {
+  //     final parsed = Map<String, dynamic>.from(event);
+  //     final type = parsed["type"];
+  //     final status = parsed["status"];
+  //     final message = parsed["message"];
+  //     final data = Map<String, dynamic>.from(parsed["data"] ?? {});
+  //
+  //     print("📥 Plugin Event Received:");
+  //     print("📌 Type: $type");
+  //     print("📌 Status: $status");
+  //     print("📩 Message: $message");
+  //
+  //     if (type == "login") {
+  //       if (status == "success") {
+  //         print("✅ Login success: $message");
+  //         print("   saleID: ${data['saleID']}");
+  //         print("   poiID: ${data['poiID']}");
+  //       } else {
+  //         print("❌ Login $status: $message");
+  //       }
+  //     } else if (type == "payment") {
+  //       paymentMessage.value = "Payment $status: $message";
+  //       if (status == "success" || status == "fail") {
+  //         Future.delayed(const Duration(seconds: 2), () {
+  //           if (Navigator.canPop(context)) {
+  //             Navigator.of(context, rootNavigator: true).pop();
+  //             paymentMessage.value = "Waiting for terminal...";
+  //           }
+  //         });
+  //       }
+  //     } else if (type == "transactionStatus") {
+  //       paymentMessage.value = "Transaction $status: $message";
+  //     } else if (type == "displayRequest") {
+  //       paymentMessage.value = message ?? "Processing...";
+  //     } else if (type == "timeout") {
+  //       paymentMessage.value = message;
+  //     }
+  //   }, onError: (error) {
+  //     print("❗ Event stream error: $error");
+  //   });
+  // }
 
   // Platform messages are asynchronous, so we initialize in an async method.
   Future<void> initPlatformState() async {
@@ -190,20 +234,21 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _mockQrPay() async {
     List<Map<String, dynamic>> items = [
-      {
-        "productCode": "1234567890123",
-        "quantity": 1,
-        "unitPrice": 0.1,
-        "itemAmount": 1.0,
-        "productLabel": "Test Product"
-      },
-      {
-        "productCode": "123456789",
-        "quantity": 2,
-        "unitPrice": 0.1,
-        "itemAmount": 3,
-        "productLabel": "Test Product2"
-      }
+      // {
+      //   "productCode": "1234567890123",
+      //   "quantity": 1,
+      //   "unitPrice": 0.1,
+      //   "itemAmount": 1.0,
+      //   "productLabel": "Test Product"
+      // },
+      // {
+      //   "productCode": "123456789",
+      //   "quantity": 2,
+      //   "unitPrice": 0.1,
+      //   "itemAmount": 3,
+      //   "productLabel": "Test Product2"
+      // },
+      {"productCode": "DMGTC44856"}
     ];
     _fusionApiFlutterPlugin.doPayment("TesttingID", items, 4);
   }
@@ -221,6 +266,13 @@ class _MyAppState extends State<MyApp> {
         originalPOIID: originalPOIID,
         originalPOITransactionID: originalPOITransactionID,
         originalPOITransactionTime: originalPOITransactionTime);
+  }
+
+  Future<void> _unmatchedRefund() async {
+    _fusionApiFlutterPlugin.doUnmatchedRefund(
+        transactionID: "refund-test-id-001",
+        refundAmount: 4,
+        items: []);
   }
 
   final ValueNotifier<String> paymentMessage = ValueNotifier("Waiting for terminal...");
@@ -403,6 +455,13 @@ class _MyAppState extends State<MyApp> {
                         await _refund();
                       },
                       child: const Text("Refund"),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        showTransactionDialog(context);
+                        await _unmatchedRefund();
+                      },
+                      child: const Text("XMRefund"),
                     ),
                   ],
                 ),

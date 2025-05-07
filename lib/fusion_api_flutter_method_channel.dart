@@ -102,6 +102,19 @@ class MethodChannelFusionApiFlutter extends FusionApiFlutterPlatform {
   }
 
   @override
+  Future<void> doUnmatchedRefund({
+    required String transactionID,
+    required List<Map<String, dynamic>> items,
+    required double refundAmount,
+  }) async {
+    await methodChannel.invokeMethod('doUnmatchedRefund', {
+      'transactionID': transactionID,
+      'items': items,
+      'refundAmount': refundAmount,
+    });
+  }
+
+  @override
   Future<String> doAbort() async {
     final result = await methodChannel.invokeMethod<String>('doAbort');
     return result!;

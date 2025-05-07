@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.EventChannel
 
 
 /** FusionApiFlutterPlugin */
@@ -25,8 +26,18 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
     private lateinit var fusionManager: FusionAPIManagerNew
     private var fusionClient: FusionClient = FusionClient(true)
 
+    private lateinit var eventChannel: EventChannel
+    private var eventSink: EventChannel.EventSink? = null
+
     companion object {
         lateinit var methodChannel: MethodChannel
+
+        var eventSink: EventChannel.EventSink? = null
+        fun sendEvent(payload: Map<String, Any?>) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                eventSink?.success(payload)
+            }
+        }
     }
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -35,6 +46,17 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
         methodChannel = channel
         channel.setMethodCallHandler(this)
         fusionManager = FusionAPIManagerNew(fusionClient, context)
+
+        eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "fusion_plugin/events")
+        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                eventSink = sink
+            }
+
+            override fun onCancel(arguments: Any?) {
+                eventSink = null
+            }
+        })
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -94,6 +116,13 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
                         call.argument<String>("originalPOITransactionTime")!!,
                 )
             }
+            "doUnmatchedRefund" -> {
+                fusionManager.doUnmatchedRefund(
+                    call.argument<String>("transactionID")!!,
+                    call.argument<List<Map<String, Any>>>("items")!!,
+                    call.argument<Double>("refundAmount")!!,
+                )
+            }
             "doAbort" -> {
                 fusionManager.doAbortFromDart(
                         "User Cancel",
@@ -108,6 +137,8 @@ class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        eventSink = null
+
     }
 
 }

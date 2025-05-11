@@ -48,7 +48,7 @@ android {
     dependencies {
         testImplementation 'org.jetbrains.kotlin:kotlin-test'
         testImplementation 'org.mockito:mockito-core:5.0.0'
-        implementation 'com.datameshgroup.fusion:fusion-cloud:1.0.8'
+        implementation 'com.datameshgroup.fusion:fusion-cloud:2.0.2'
         implementation 'com.datameshgroup.fusion:fusion-sdk:3.0.3'
         implementation 'com.google.code.gson:gson:2.10.1'
     }

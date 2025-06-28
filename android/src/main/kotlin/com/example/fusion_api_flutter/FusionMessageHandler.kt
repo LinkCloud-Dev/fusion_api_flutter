@@ -85,13 +85,13 @@ class FusionMessageHandler {
             }
             MessageCategory.Payment -> {
                 val paymentResponse = requireNotNull(response.paymentResponse) { "Missing paymentResponse" }
-                val paymentResult = requireNotNull(paymentResponse.paymentResult) { "Missing paymentResult" }
-                val paymentType = requireNotNull(paymentResult.paymentType) { "Missing paymentType" }
                 val responseResult = paymentResponse.response.result
-                val type = if (paymentType == PaymentType.Normal) "Payment" else paymentType.name
-
 
                 if (responseResult == ResponseResult.Success) {
+                    val paymentResult = requireNotNull(paymentResponse.paymentResult) { "Missing paymentResult" }
+                    val paymentType = requireNotNull(paymentResult.paymentType) { "Missing paymentType" }
+                    val type = if (paymentType == PaymentType.Normal) "Payment" else paymentType.name
+
                     fusionMessageResponse.setMessage(
                         true,
                         MessageType.Response,
@@ -100,7 +100,7 @@ class FusionMessageHandler {
                         "$type SUCCESSFUL"
                     )
                 } else {
-                    val additionalResponse: String = paymentResponse.response.additionalResponse
+                    val additionalResponse: String = paymentResponse.response.additionalResponse ?: ""
                     fusionMessageResponse.setMessage(
                         false,
                         MessageType.Response,

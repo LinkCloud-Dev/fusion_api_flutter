@@ -24,8 +24,11 @@ import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
+import java.util.logging.Logger
+import java.util.logging.Level
 import java.lang.IllegalStateException
+import java.io.File
+import java.io.IOException
 
 import au.com.dmg.fusion.MessageHeader;
 import au.com.dmg.fusion.SaleToPOI;
@@ -79,9 +82,15 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
     private var secondsRemaining = 0
     private var prevSecond: Long = 0L
 
-    private var loginTimeout = 60000L
-    private var paymentTimeout = 60000L // in ms
-    private var errorHandlingTimeout = 90000L
+    // Constants
+    private val DEFAULT_LOGIN_TIMEOUT = 60000L
+    private val DEFAULT_PAYMENT_TIMEOUT = 60000L
+    private val DEFAULT_ERROR_HANDLING_TIMEOUT = 90000L
+
+    // Variables
+    private var loginTimeout = DEFAULT_LOGIN_TIMEOUT
+    private var paymentTimeout = DEFAULT_PAYMENT_TIMEOUT
+    private var errorHandlingTimeout = DEFAULT_ERROR_HANDLING_TIMEOUT
 
     private var saleID: String = ""
     private var poiID: String = ""
@@ -95,6 +104,8 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
 
     private var abortReason: String = ""
     private var useTestEnvironment: Boolean = true
+
+    private var isLoggingEnabled = true
 
     @Volatile private var isAbortRequested = false
 
@@ -112,6 +123,11 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
 
         fusionClient.setSettings(saleID, poiID, kek)
         log("FusionClient initialized with SaleID: $saleID, POIID: $poiID")
+
+        val fusionLogger = Logger.getLogger("au.com.dmg.fusion.client")
+        fusionLogger.level = Level.ALL
+
+        fusionLogger.addHandler(CustomLogHandler { log(it) })
     }
 
 //    fun initFromCache(result: Result){
@@ -133,7 +149,6 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
     private fun listen() {
         try {
             prevSecond = computeSecondsRemaining(prevSecond)
-            println("///////listen()")
 
             val saleToPOI = fusionClient.readMessage() ?: return
             log("Message Received: \n" + prettyPrintJson(saleToPOI))
@@ -153,7 +168,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
 
                 // Reset timeout if current transaction is payment
                 if (currentTransaction == MessageCategory.Payment) {
-                    secondsRemaining = (paymentTimeout / 1000).toInt()
+                    secondsRemaining = (DEFAULT_PAYMENT_TIMEOUT / 1000).toInt()
                 }
                 waitingForResponse = true
             }
@@ -186,6 +201,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                         waitingForResponse = false
                     }
                     MessageCategory.Payment -> {
+                        println("-------payment response --------")
                         displayPaymentResponseMessage(fmr)
                         waitingForResponse = false
                     }
@@ -202,21 +218,30 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                 }
             }
         } catch (e: FusionException) {
-            endLog("Stopped listening to message. Reason:\n ${e.message}")
+            val errorMessage = e.message ?: ""
+            endLog("Stopped listening to message. Reason:\n $errorMessage")
+            if (errorMessage.contains("Connection")) {
+                notifyDart(
+                    type = "connection",
+                    status = "closed",
+                    message = "WebSocket connection closed. entering recovery."
+                )
 
+            }
             if (currentTransaction != MessageCategory.TransactionStatus) {
                 println("CURRENT SERVICE ID: $currentServiceID")
 
-                executor.shutdownNow()
-                executor = Executors.newSingleThreadExecutor()
+//                executor.shutdownNow()
+//                executor = Executors.newSingleThreadExecutor()
 
-                executor.execute {
+//                executor.execute {
                     println("go to try catch ...... Websocket connection interrupted")
                     checkTransactionStatus(
                         serviceID = currentServiceID ?: "",
-                        abortReason = "Websocket connection interrupted"
+//                      abortReason = "Websocket connection interrupted"
+                        abortReason =""
                     )
-                }
+//                }
             }
         }
     }
@@ -271,6 +296,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
         transactionID: String,
         items: List<Map<String, Any>>,
         totalAmount: Double,
+        isRetry: Boolean = false
     )  {
         executor.execute {
             try {
@@ -286,6 +312,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                 fusionClient.sendMessage(paymentRequest, currentServiceID)
 
                 prevSecond = System.currentTimeMillis()
+                paymentTimeout = if (isRetry) paymentTimeout else DEFAULT_PAYMENT_TIMEOUT
                 secondsRemaining = (paymentTimeout / 1000).toInt()
 
                 waitingForResponse = true
@@ -316,9 +343,6 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                         )
                         break
                     }
-//                    if (!waitingForResponse) {
-//                        result.success("Payment completed")
-//                    }
                 }
 
             } catch (e: IllegalStateException) {
@@ -328,7 +352,6 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                     serviceID = currentServiceID ?: "",
                     abortReason = abortReason
                 )
-//                result.error("CONFIGURATION_EXCEPTION", e.message, null)
 
             } catch (e: FusionException) {
                 val errorMessage = e.message ?: ""
@@ -345,9 +368,19 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                     return@execute  // 不再重试，退出 executor thread
                 }
 
+                if (errorMessage.contains("Connection")) {
+                    notifyDart(
+                        type = "connection",
+                        status = "closed",
+                        message = "WebSocket connection closed. Possibly due to network issue."
+                    )
+                    Thread.sleep(2000)
+
+                }
+
                 // Continue the timer
                 paymentTimeout = secondsRemaining * 1000L
-                doPayment(transactionID, items, totalAmount)
+                doPayment(transactionID, items, totalAmount, true)
             }
         }
     }
@@ -384,6 +417,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
         originalPOIID: String,
         originalPOITransactionID: String,
         originalPOITransactionTime:String,
+        isRetry: Boolean =false
     ) {
         executor.execute {
             try {
@@ -404,6 +438,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                 fusionClient.sendMessage(refundRequest, currentServiceID)
 
                 prevSecond = System.currentTimeMillis()
+                paymentTimeout = if (isRetry) paymentTimeout else DEFAULT_PAYMENT_TIMEOUT
                 secondsRemaining = (paymentTimeout / 1000).toInt()
 
                 waitingForResponse = true
@@ -449,6 +484,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                     originalPOIID,
                     originalPOITransactionID,
                     originalPOITransactionTime,
+                    true
                 )
             }
         }
@@ -457,7 +493,8 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
     fun doUnmatchedRefund(
         transactionID: String,
         items: List<Map<String, Any>>,
-        refundAmount: Double
+        refundAmount: Double,
+        isRetry: Boolean =false
     ) {
         executor.execute {
             try {
@@ -474,6 +511,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
                 fusionClient.sendMessage(refundRequest, currentServiceID)
 
                 prevSecond = System.currentTimeMillis()
+                paymentTimeout = if (isRetry) paymentTimeout else DEFAULT_PAYMENT_TIMEOUT
                 secondsRemaining = (paymentTimeout / 1000).toInt()
 
                 waitingForResponse = true
@@ -511,7 +549,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
             } catch (e: FusionException) {
                 endLog("FusionException: ${e.message}. Resending the Request...", true)
                 paymentTimeout = secondsRemaining * 1000L
-                doUnmatchedRefund(transactionID, items, refundAmount)
+                doUnmatchedRefund(transactionID, items, refundAmount,true)
             }
         }
     }
@@ -579,7 +617,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
 
             // ✅ set timeout 90s
             prevSecond = System.currentTimeMillis()
-            secondsRemaining = (errorHandlingTimeout / 1000).toInt()
+            secondsRemaining = (DEFAULT_ERROR_HANDLING_TIMEOUT / 1000).toInt()
             waitingForResponse = true
 
             while (waitingForResponse) {
@@ -602,7 +640,25 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
         } catch (e: IllegalStateException) {
 //            endTransactionUi()
             endLog(e)
+        } catch (e: FusionException) {
+        val errorMessage = e.message ?: ""
+
+        endLog("FusionException: $errorMessage. Resending the Request...", true)
+
+        if (errorMessage.contains("Connection")) {
+            notifyDart(
+                type = "connection",
+                status = "closed",
+                message = "checking TX, WebSocket connection closed."
+            )
+            Thread.sleep(2000)
+
         }
+
+        // Continue the timer
+        checkTransactionStatus(serviceID,abortReason ="")
+    }
+
     }
 
 
@@ -734,14 +790,20 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
             .build()
 
         val saleItems = items.mapIndexed { index, item ->
+            val productCode = item["productCode"] as? String ?: "UNKNOWN"
+            val quantity = (item["quantity"] as? Number)?.toDouble() ?: 1.0
+            val unitPrice = (item["unitPrice"] as? Number)?.toDouble() ?: 0.0
+            val itemAmount = (item["itemAmount"] as? Number)?.toDouble() ?: (quantity * unitPrice)
+            val productLabel = item["productLabel"] as? String ?: productCode
+
             SaleItem.Builder()
                 .itemID(index)
-                .productCode(item["productCode"] as String)
+                .productCode(productCode)
                 .unitOfMeasure(UnitOfMeasure.Other)
-                .quantity(BigDecimal((item["quantity"] as Number).toDouble()))
-                .unitPrice(BigDecimal((item["unitPrice"] as Number).toDouble()))
-                .itemAmount(BigDecimal((item["itemAmount"] as Number).toDouble()))
-                .productLabel(item["productLabel"] as String)
+                .quantity(BigDecimal(quantity))
+                .unitPrice(BigDecimal(unitPrice))
+                .itemAmount(BigDecimal(itemAmount))
+                .productLabel(productLabel)
                 .build()
         }
 
@@ -830,6 +892,7 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
     }
 
     private fun displayPaymentResponseMessage(fmr: FusionMessageResponse) {
+        println(" ---------display payment response msg begin----------")
         val saleToPOI = fmr.saleToPOI as? SaleToPOIResponse ?: return
         val header = saleToPOI.messageHeader ?: return
         val paymentResponse = saleToPOI.paymentResponse ?: return
@@ -921,11 +984,47 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
         errorCondition: ErrorCondition?,
         additionalResponse: String?
     ) {
-        val message = "${errorCondition?.name} - $additionalResponse"
-        println("❌ Transaction Response Error: $message")
+        /*
+        {
+            "MessageHeader": {
+                "MessageCategory": "TransactionStatus",
+                "MessageClass": "Service",
+                "MessageType": "Response",
+                "POIID": "LINKPOS1",
+                "SaleID": "LinkPos",
+                "ServiceID": "e2a3b4a9-36d6-4f20-8e42-7045897fc8ca"
+            },
+            "SecurityTrailer": {...},
+            "TransactionStatusResponse": {
+                "Response": {
+                    "AdditionalResponse": "Message Not Found", // Indicates the message was not found
+                    "ErrorCondition": "NotFound", // Error condition indicating not found
+                    "Result": "Failure" // The result of the transaction status check
+                }
+            }
+        }
+        */
 
+        val data = mapOf(
+            "TransactionStatusResponse" to mapOf(
+                "ErrorCondition" to errorCondition?.name,
+                "AdditionalResponse" to additionalResponse,
+            )
+        )
+
+        val message = "${errorCondition?.name} - $additionalResponse"
+
+        notifyDart(
+            type = "transactionStatus",
+            status =  "fail",
+            message = message,
+            data = data
+        )
+
+        println("❌ Transaction Response Error: ${errorCondition?.name} - $additionalResponse")
         waitingForResponse = false
     }
+
 
     private fun displayLogoutResponseMessage(fmr: FusionMessageResponse) {
         log("Logout response received.")
@@ -969,11 +1068,12 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
             }
 
         } else {
+            // result is Failure and not in progress
             val tsr = (fmr.saleToPOI as? SaleToPOIResponse)?.transactionStatusResponse
             val response = tsr?.response
 
             val err = response?.errorCondition
-            val msg = response?.additionalResponse
+            val msg = response?.additionalResponse ?: "[No additional response]"
 
             endLog("Error Condition: $err, Additional Response: $msg", stopWaiting = true)
             displayTransactionResponseMessage(err, msg)
@@ -996,12 +1096,26 @@ class FusionAPIManagerNew(private val fusionClient: FusionClient,private val con
     }
 
     private fun log(message: String?) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-        println("${sdf.format(Date())} $message")
+        if (!isLoggingEnabled) return
+        val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").format(Date())
+        val formattedMessage = "$timestamp $message"
+
+        println(formattedMessage)
+        writeLogToFile(formattedMessage)
     }
 
     private fun log(ex: Exception) {
         log(ex.message)
+    }
+
+    private fun writeLogToFile(message: String) {
+        val logFile = File(context.filesDir, "plugin_logs.txt")
+
+        try {
+            logFile.appendText("$message\n")
+        } catch (e: IOException) {
+            println("Failed to write log: ${e.message}")
+        }
     }
 
     private fun notifyDart(

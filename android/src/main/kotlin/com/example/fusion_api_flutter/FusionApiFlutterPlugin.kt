@@ -14,7 +14,25 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.EventChannel
 
+import java.util.logging.Handler
+import java.util.logging.Level
+import java.util.logging.LogRecord
 
+class CustomLogHandler(private val logCallback: (String) -> Unit) : Handler() {
+
+    override fun publish(record: LogRecord) {
+        val logMessage = "${record.level}: ${record.message}"
+        logCallback(logMessage)
+    }
+
+    override fun flush() {
+        // No-op
+    }
+
+    override fun close() {
+        // No-op
+    }
+}
 /** FusionApiFlutterPlugin */
 class FusionApiFlutterPlugin : FlutterPlugin, MethodCallHandler {
     /// The MethodChannel that will the communication between Flutter and native Android

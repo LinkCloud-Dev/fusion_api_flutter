@@ -51,6 +51,9 @@ class _MyAppState extends State<MyApp> {
   TextEditingController kekController = TextEditingController(text: '7F1E8AA14851D1C41E254C6EFCBE44296ED7F8FB496F312D');
   bool manualLoginLocked = false;
 
+  final TextEditingController productCodeController = TextEditingController(text: "DMGTC38292");
+  String currentMockProductCode = "DMGTC38292";
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +94,23 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  Future<void> unpairQR() async {
+    qrPoiID = '';
+
+    await _fusionApiFlutterPlugin.init(
+      saleID: qrSaleID,
+      poiID: qrPoiID,
+      kek: qrKek,
+      useTestEnvironment: true,
+    );
+
+    setState(() {
+      _statusMessage = "QR POIID cleared. QR settings reset.";
+    });
+
+    print("✅ QR POIID cleared via init method.");
+  }
+
   // Create QR Code Data
   void getQRCodeData(
       String certificationCode, String posName, int version) {
@@ -120,24 +140,26 @@ class _MyAppState extends State<MyApp> {
 
         if (type == "login") {
           if (status == "success") {
-            print("✅ Login success:");
-            print("   Message: $message");
-            print("   saleID: ${data['saleID']}");
-            print("   poiID: ${data['poiID']}");
-            print("   kek: ${data['']}");
+            print("===========✅ Login success:===========");
+            print("=========== Message: $message===========");
+            print("=========== saleID: ${data['saleID']}===========");
+            print("=========== poiID: ${data['poiID']}===========");
+            print("=========== kek: ${data['']}===========");
           } else {
-            print("❌ Login $status:");
-            print("   Message: $message");
+            print("===========❌ Login $status:===========");
+            print("===========Message: $message===========");
           }
         }
         else if (type == "payment") {
-          print("📦 Payment Plugin Event Received:");
-          print("📌 Status: $status");
-          print("📩 Message: $message");
-          print("🔍 Payment Data:");
+          print("=========== Payment Received:===========");
+          print("=========== Status: $status===========");
+          print("=========== Message: $message===========");
+          print("=========== Payment Data:===========");
           data.forEach((key, value) {
             print("   $key: $value");
           });
+          print("===========END===========");
+
           if (status == "success" || status == "fail") {
             paymentMessage.value = "Payment $status: $message";
             Future.delayed(const Duration(seconds: 2), () {
@@ -149,18 +171,23 @@ class _MyAppState extends State<MyApp> {
           }
         }
         else if (type == "transactionStatus") {
-          print("⚠️ Transaction Status Event:");
-          print("📌 Status: ${event['status']}");
-          print("📩 Message: ${event['message']}");
+          print("=========== Transaction Status Event:============");
+          print("=========== Status: ${event['status']}===========");
+          print("=========== Message: ${event['message']}===========");
 
-          if (event["status"] == "timeout") {
+          if (event[status] == "timeout") {
             paymentMessage.value = "Transaction timed out. Please try again.";
+          } else if(event[status] == "fail"){
+            paymentMessage.value ==event['message']?? "Processing...";
           }
         }
         else if (type == "displayRequest") {
           paymentMessage.value = event['message'] ?? "Processing...";
         }
         else if(type == "timeout"){
+          paymentMessage.value =  event['message'];
+        }
+        else if(type=="connection"){
           paymentMessage.value =  event['message'];
         }
       }
@@ -234,23 +261,43 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _mockQrPay() async {
     List<Map<String, dynamic>> items = [
-      // {
-      //   "productCode": "1234567890123",
-      //   "quantity": 1,
-      //   "unitPrice": 0.1,
-      //   "itemAmount": 1.0,
-      //   "productLabel": "Test Product"
-      // },
-      // {
-      //   "productCode": "123456789",
-      //   "quantity": 2,
-      //   "unitPrice": 0.1,
-      //   "itemAmount": 3,
-      //   "productLabel": "Test Product2"
-      // },
-      {"productCode": "DMGTC44856"}
+      {
+        "productCode": "1234567890123",
+        "quantity": 1,
+        "unitPrice": 0.1,
+        "itemAmount": 1.0,
+        "productLabel": "Test Product"
+      },
+      {
+        "productCode": "123456789",
+        "quantity": 2,
+        "unitPrice": 0.1,
+        "itemAmount": 3,
+        "productLabel": "Crème Brûlée 🍮"
+      },
+      // {"productCode": "DMGTC38292"} //mocktest
     ];
-    _fusionApiFlutterPlugin.doPayment("TesttingID", items, 4);
+    _fusionApiFlutterPlugin.doPayment("TesttingID", items, 0.4);
+  }
+
+  Future<void> _mockPay() async {
+    List<Map<String, dynamic>> items = [
+      {
+        "productCode": currentMockProductCode,
+        "quantity": 2,
+        "unitPrice": 0.2,
+        "itemAmount": 0.4,
+        "productLabel": "Test Item"
+      }
+    ];
+    _fusionApiFlutterPlugin.doPayment("MockTest", items, 0.4);
+  }
+
+  Future<void> _mockRefund() async {
+    List<Map<String, dynamic>> items = [
+      {"productCode": currentMockProductCode}
+    ];
+    _fusionApiFlutterPlugin.doUnmatchedRefund(transactionID:"MockTest",refundAmount: 0.4 ,items:items);
   }
 
   Future<void> _refund() async {
@@ -273,6 +320,11 @@ class _MyAppState extends State<MyApp> {
         transactionID: "refund-test-id-001",
         refundAmount: 4,
         items: []);
+  }
+
+  Future<void> _handleUnpairQR() async {
+    await unpairQR();
+    print("QR settings cleared via init()");
   }
 
   final ValueNotifier<String> paymentMessage = ValueNotifier("Waiting for terminal...");
@@ -442,6 +494,52 @@ class _MyAppState extends State<MyApp> {
                   spacing: 8.0,
                   runSpacing: 8.0,
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: productCodeController,
+                              decoration: const InputDecoration(
+                                labelText: "Product Code",
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final code = productCodeController.text.trim();
+                              if (code.isEmpty) return;
+
+                              setState(() {
+                                currentMockProductCode = code;
+                              });
+
+                              showTransactionDialog(context);
+                              await _mockPay();
+                            },
+                            child: const Text("MockPay"),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final code = productCodeController.text.trim();
+                              if (code.isEmpty) return;
+
+                              setState(() {
+                                currentMockProductCode = code;
+                              });
+
+                              showTransactionDialog(context);
+                              await _mockRefund();
+                            },
+                            child: const Text("MockRefund"),
+                          ),
+                        ],
+                      ),
+                    ),
                     ElevatedButton(
                       onPressed: () async {
                         showTransactionDialog(context);
@@ -461,7 +559,13 @@ class _MyAppState extends State<MyApp> {
                         showTransactionDialog(context);
                         await _unmatchedRefund();
                       },
-                      child: const Text("XMRefund"),
+                      child: const Text("XMRefund"), // unmatched refund
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _handleUnpairQR();
+                      },
+                      child: const Text("Unpair QR"),
                     ),
                   ],
                 ),
